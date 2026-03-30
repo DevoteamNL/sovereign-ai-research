@@ -28,6 +28,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.messages import SystemMessage
 
 from aiq_agent.common import extract_json
+from aiq_agent.common import get_thinking_prefix
 from aiq_agent.common import load_prompt
 from aiq_agent.common import render_prompt_template
 
@@ -105,7 +106,8 @@ class IntentClassifier:
         last_content = messages[-1].content
         query = last_content if isinstance(last_content, str) else str(last_content or "")
 
-        system_content = render_prompt_template(
+        thinking_prefix = get_thinking_prefix(self.llm, enable=False)
+        system_content = thinking_prefix + render_prompt_template(
             self.prompt,
             query=query,
             current_datetime=current_datetime,
