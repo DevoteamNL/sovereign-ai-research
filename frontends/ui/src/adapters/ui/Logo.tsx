@@ -4,17 +4,14 @@
 /**
  * Logo Component Shim
  *
- * Replaces the internal @kui/foundations-react Logo component which is
- * not available in the public @nvidia/foundations-react-core package.
- * Renders the NVIDIA eye mark as an inline SVG.
- *
- * The fill color is always NVIDIA green (#76b900), hardcoded in the SVG.
+ * Renders the Red Hat logo as an inline SVG.
+ * The fill color is Red Hat red (#EE0000).
  */
 
 import { type FC } from 'react'
 
 interface LogoProps {
-  /** 'horizontal' renders a wider logo; 'logo-only' renders the eye mark */
+  /** 'horizontal' renders a wider logo; 'logo-only' renders the hat mark */
   kind?: 'horizontal' | 'logo-only'
   size?: 'small' | 'medium' | 'large'
   className?: string
@@ -27,7 +24,7 @@ const fullSizeMap = {
   large: { width: 160, height: 88 },
 } as const
 
-/** Dimensions when showing just the eye */
+/** Dimensions when showing just the hat */
 const eyeSizeMap = {
   small: { width: 28, height: 28 },
   medium: { width: 40, height: 40 },
@@ -35,14 +32,11 @@ const eyeSizeMap = {
 } as const
 
 /**
- * Renders the NVIDIA logo as an inline SVG.
- *
- * The fill color is always NVIDIA green (#76b900), driven by the
- * CSS variable `--nv-logo-image-color` set on `:root` in globals.css.
+ * Renders the Red Hat fedora logo as an inline SVG.
  */
 export const Logo: FC<LogoProps> = ({ kind = 'horizontal', size = 'medium', className }) => {
-  const isEyeOnly = kind === 'logo-only'
-  const dims = isEyeOnly ? eyeSizeMap[size] : fullSizeMap[size]
+  const isHatOnly = kind === 'logo-only'
+  const dims = isHatOnly ? eyeSizeMap[size] : fullSizeMap[size]
 
   return (
     <span
@@ -51,15 +45,20 @@ export const Logo: FC<LogoProps> = ({ kind = 'horizontal', size = 'medium', clas
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 71 47"
+        viewBox="0 0 512 512"
         width={dims.width}
         height={dims.height}
-        aria-label="NVIDIA"
+        aria-label="Red Hat"
         role="img"
       >
+        {/* Red Hat fedora icon */}
         <path
-          d="M7.255 20.234s6.419-9.476 19.236-10.455V6.34C12.294 7.481 0 19.51 0 19.51s6.963 20.138 26.491 21.982v-3.655C12.161 36.032 7.255 20.234 7.255 20.234zM26.49 30.57v3.346c-10.83-1.931-13.837-13.194-13.837-13.194s5.2-5.764 13.837-6.698v3.672l-.016-.002c-4.532-.544-8.074 3.692-8.074 3.692s1.984 7.131 8.09 9.184zm0-30.57v6.341c.417-.033.834-.06 1.253-.074 16.14-.544 26.658 13.242 26.658 13.242s-12.08 14.694-24.663 14.694c-1.153 0-2.234-.107-3.248-.287v3.92a21.24 21.24 0 002.704.176c11.71 0 20.18-5.982 28.38-13.063 1.359 1.089 6.925 3.738 8.07 4.9-7.797 6.529-25.968 11.792-36.27 11.792-.993 0-1.947-.06-2.884-.15V47H71V0H26.491zm0 14.024V9.78c.412-.03.829-.052 1.253-.065 11.607-.365 19.222 9.977 19.222 9.977S38.742 31.12 29.923 31.12c-1.27 0-2.407-.205-3.432-.55V17.697c4.52.546 5.428 2.543 8.145 7.073l6.042-5.096s-4.41-5.787-11.845-5.787c-.81 0-1.583.057-2.342.138z"
-          fill="#76b900"
+          d="M341.5 261.1c-1.1-3.6-3.2-7-6.2-9.7l-2.6-2.3c-5.8-5-13.3-7.7-21-7.7h-16.4c-1.4 0-2.7.3-3.9.8l-35.7 15.3c-3.1 1.3-5.1 4.3-5.1 7.7v7.9c0 3.3 2 6.3 5.1 7.6l11.5 4.9c3.1 1.3 5.1 4.3 5.1 7.6v18.6c0 4.6-3.7 8.3-8.3 8.3H196c-4.6 0-8.3 3.7-8.3 8.3v16.6c0 4.6 3.7 8.3 8.3 8.3h67.5c29.8 0 54-24.2 54-54v-9.8c0-2.5-1.1-4.9-3.1-6.5l-9.2-7.6c-1.9-1.6-3.1-3.9-3.1-6.5v-.5c0-2.8 1.4-5.3 3.7-6.8l4.5-2.9c2.3-1.5 3.7-4.1 3.7-6.8v-2.2c0-1.3-.2-2.7-.5-3.8z"
+          fill="#EE0000"
+        />
+        <path
+          d="M459.4 187.5c-25.7-3.3-50.9 2.8-71.4 17.3l-14 9.9c-8.5 6-18.5 9.2-28.8 9.2h-39.9c-6.3 0-12.3 1.5-17.8 4.3l-50.9 25.8c-9.2 4.7-15.1 14.1-15.1 24.5v14.1c0 9.4 4.8 18.2 12.7 23.3l23.7 15.2c2.6 1.7 4.2 4.6 4.2 7.7v30.4c0 15 12.2 27.2 27.2 27.2h30.1c44.7 0 81-36.3 81-81v-13.5c0-3.6-1.7-7-4.5-9.2l-14.6-11.3c-2.8-2.2-4.5-5.6-4.5-9.2v-4.2c0-4.1 2.1-7.9 5.6-10.1l14.7-9.4c5.5-3.5 8.8-9.5 8.8-16v-4.3c0-3.2-.6-6.3-1.8-9.2-2.1-5.2-3.5-10.8-3.8-16.5-.3-4.6 3.7-8.5 8.3-7.9 7.8 1.1 15.4 3.6 22.3 7.6 8.2 4.7 17.7 6.2 27 4.2l.6-.1c8-1.7 14.9-6.7 18.9-13.7 4-7 4.7-15.2 2-22.7-3.2-8.8-10.7-15.1-19.9-16.4z"
+          fill="#EE0000"
         />
       </svg>
     </span>

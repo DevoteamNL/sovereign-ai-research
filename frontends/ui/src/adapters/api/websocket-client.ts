@@ -72,6 +72,7 @@ export class NATWebSocketClient {
   private isIntentionallyClosed = false
   private errorBeforeClose = false
   private messageIdCounter = 0
+  private connectTimeout: number | null = null
   /** ID of the last user message sent -- used by callbacks to detect stale responses */
   activeParentId: string | null = null
 
@@ -106,6 +107,15 @@ export class NATWebSocketClient {
       const wsUrl = this.options.websocketUrl || (await getWebSocketUrl())
       this.ws = new WebSocket(wsUrl)
       this.setupEventHandlers()
+
+      // Guard against connections that hang in CONNECTING state forever
+      // (e.g. when the browser connects to a port without a WebSocket proxy).
+      this.connectTimeout = window.setTimeout(() => {
+        if (this.ws?.readyState === WebSocket.CONNECTING) {
+          console.warn('[WebSocket] Connection timeout — still CONNECTING after 10 s, closing')
+          this.ws.close()
+        }
+      }, 10_000)
     } catch {
       this.options.callbacks.onConnectionChange?.('error', { intentional: false })
       this.handleReconnect()
@@ -118,6 +128,7 @@ export class NATWebSocketClient {
   disconnect = (): void => {
     this.isIntentionallyClosed = true
     this.reconnectCount = 0
+    if (this.connectTimeout) { clearTimeout(this.connectTimeout); this.connectTimeout = null }
 
     if (this.ws) {
       this.ws.close()
@@ -202,6 +213,7 @@ export class NATWebSocketClient {
     if (!this.ws) return
 
     this.ws.onopen = () => {
+      if (this.connectTimeout) { clearTimeout(this.connectTimeout); this.connectTimeout = null }
       this.reconnectCount = 0
       this.errorBeforeClose = false
       this.options.callbacks.onConnectionChange?.('connected')

@@ -153,9 +153,9 @@ export const ChatArea: FC<ChatAreaProps> = ({ isAuthenticated = false, onSignIn 
                   onErrorDismiss={dismissErrorCard}
                 />
 
-                {/* Render thinking steps after user messages — negative margin lets the next message overlap */}
+                {/* Render thinking steps after user messages */}
                 {isUserMessage && hasThinkingSteps && (
-                  <Flex justify="start" className="-mb-8 w-[85%]">
+                  <Flex justify="start" className="w-[85%]">
                     <ChatThinking
                       steps={messageSteps}
                       isThinking={isStreaming && message.id === currentUserMessageId}
@@ -356,7 +356,7 @@ const WelcomeState: FC<WelcomeStateProps> = ({ isAuthenticated = false, onSignIn
             <Lock />
           </span>
           <Text kind="title/lg" className="text-primary">
-            Welcome to AI-Q
+            Welcome to Red Hat Research
           </Text>
           <Text kind="body/regular/md" className="text-subtle">
             Sign in with your account to start your AI-powered research session.
@@ -365,7 +365,7 @@ const WelcomeState: FC<WelcomeStateProps> = ({ isAuthenticated = false, onSignIn
             kind="primary"
             size="large"
             onClick={onSignIn}
-            aria-label="Sign in with NVIDIA SSO"
+            aria-label="Sign in with Red Hat SSO"
             className="mt-2"
           >
             <Flex align="center" gap="2">
@@ -391,7 +391,7 @@ const WelcomeState: FC<WelcomeStateProps> = ({ isAuthenticated = false, onSignIn
       {/* Content */}
       <Flex direction="col" align="center" gap="4" className="relative z-10 max-w-md text-center">
         <Text kind="title/lg" className="text-primary">
-          Welcome to AI-Q
+          Welcome to Red Hat Research
         </Text>
         <Text kind="body/regular/md" className="text-subtle">
           Your AI-powered research companion for exploring technical documentation, market analysis,

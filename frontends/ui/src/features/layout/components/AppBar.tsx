@@ -84,7 +84,7 @@ export const AppBar: FC<AppBarProps> = ({
   }, [rightPanel, openRightPanel, closeRightPanel, isAuthenticated])
 
   const handleDocsClick = useCallback(() => {
-    window.open('https://github.com/NVIDIA-AI-Blueprints/aiq', '_blank')
+    window.open('https://www.redhat.com/en/documentation', '_blank')
   }, [])
 
   const handleNewSessionClick = useCallback(() => {
@@ -118,7 +118,7 @@ export const AppBar: FC<AppBarProps> = ({
               <Logo kind="logo-only" size="small" />
 
               <Text kind="label/semibold/lg" className="text-primary whitespace-nowrap">
-                AI-Q
+                Red Hat Research
               </Text>
             </Flex>
           </Button>
@@ -239,9 +239,9 @@ export const AppBar: FC<AppBarProps> = ({
               kind="primary"
               size="small"
               onClick={onSignIn}
-              aria-label="Sign in with NVIDIA SSO"
-              title="Sign in with NVIDIA SSO"
-              className="ml-2 bg-[#76b900] hover:bg-[#5a8f00]"
+              aria-label="Sign in with Red Hat SSO"
+              title="Sign in with Red Hat SSO"
+              className="ml-2 bg-[#EE0000] hover:bg-[#CC0000]"
             >
               <Flex align="center" gap="1">
                 <Lock className="h-4 w-4" />

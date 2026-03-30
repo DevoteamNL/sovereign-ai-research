@@ -13,34 +13,29 @@
 }
 
 /* =============================================================================
-   NVIDIA brand color overrides (unlayered — highest cascade priority)
+   Red Hat brand color overrides (unlayered — highest cascade priority)
 
-   The KUI theme variables are defined inside @layer base in kui-generated.css,
-   but Tailwind v4's own @layer theme can shadow the underlying --color-green-*
-   palette tokens. These unlayered declarations guarantee the brand green
-   resolves correctly for: buttons (color="brand"), switch toggles, spinners.
-
-   Values match the canonical KUI hex palette from @kui/foundations-design-tokens.
+   Overrides the KUI green palette with Red Hat's red brand palette.
    ============================================================================= */
 
-/* Green palette — used by theme tokens below via var() */
+/* Red palette — Red Hat brand colors */
 :root {
-  --color-brand: #76b900;
-  --color-green-025: #dafb7d;
-  --color-green-050: #cfff40;
-  --color-green-100: #bff230;
-  --color-green-200: #a5de15;
-  --color-green-300: #76b900;
-  --color-green-400: #549a00;
-  --color-green-500: #3f8500;
-  --color-green-600: #327100;
-  --color-green-700: #265600;
-  --color-green-800: #193800;
-  --color-green-900: #142700;
-  --color-green-950: #0d1a00;
+  --color-brand: #EE0000;
+  --color-green-025: #fde0e0;
+  --color-green-050: #fcc;
+  --color-green-100: #f99;
+  --color-green-200: #f66;
+  --color-green-300: #EE0000;
+  --color-green-400: #CC0000;
+  --color-green-500: #A30000;
+  --color-green-600: #8F0000;
+  --color-green-700: #700;
+  --color-green-800: #500;
+  --color-green-900: #3C0000;
+  --color-green-950: #210000;
 }
 
-/* Light theme brand tokens — per KUI spec */
+/* Light theme brand tokens */
 :where(:root, .nv-light) {
   --background-color-interaction-primary-base: var(--color-green-300);
   --background-color-interaction-primary-hover: var(--color-green-400);
@@ -50,7 +45,7 @@
   --border-color-brand: var(--color-brand);
 }
 
-/* Dark theme brand tokens — per KUI spec (same primary stops as light) */
+/* Dark theme brand tokens */
 .nv-dark {
   --background-color-interaction-primary-base: var(--color-green-300);
   --background-color-interaction-primary-hover: var(--color-green-400);
@@ -58,6 +53,41 @@
   --border-color-interaction-primary-base: var(--color-green-300);
   --text-color-brand: var(--color-brand);
   --border-color-brand: var(--color-brand);
+}
+
+/* Override blue accent (used by "info" banners) to Red Hat red */
+:where(:root, .nv-light) {
+  --background-color-accent-blue: var(--color-green-025);
+  --background-color-accent-blue-hover: var(--color-green-050);
+  --background-color-accent-blue-selected: var(--color-green-100);
+  --background-color-accent-blue-strong: var(--color-green-800);
+  --background-color-accent-blue-subtle: var(--color-green-100);
+  --background-color-accent-blue-subtle-hover: var(--color-green-200);
+  --background-color-accent-blue-subtle-selected: var(--color-green-600);
+  --border-color-accent-blue: var(--color-green-600);
+  --text-color-accent-blue: var(--color-green-700);
+  --text-color-accent-blue-strong: var(--color-green-700);
+  --text-color-accent-blue-subtle: var(--color-green-200);
+}
+.nv-dark {
+  --background-color-accent-blue: var(--color-green-900);
+  --background-color-accent-blue-hover: var(--color-green-800);
+  --background-color-accent-blue-selected: var(--color-green-700);
+  --background-color-accent-blue-strong: var(--color-green-200);
+  --background-color-accent-blue-subtle: var(--color-green-800);
+  --background-color-accent-blue-subtle-hover: var(--color-green-700);
+  --background-color-accent-blue-subtle-selected: var(--color-green-600);
+  --border-color-accent-blue: var(--color-green-300);
+  --text-color-accent-blue: var(--color-green-300);
+  --text-color-accent-blue-strong: var(--color-green-200);
+  --text-color-accent-blue-subtle: var(--color-green-200);
+}
+
+/* Red Hat font override — applies site-wide over any KUI/NVIDIA Sans declarations */
+html,
+body,
+* {
+  font-family: 'Red Hat Text', 'Red Hat Display', system-ui, sans-serif !important;
 }
 
 /* Custom global styles */
@@ -257,9 +287,9 @@ body {
   --tw-ring-color: var(--border-color-brand);
 }
 
-/* Force NVIDIA green on inlined SVG icons whose paths use fill="currentColor" */
+/* Force Red Hat red on inlined SVG icons whose paths use fill="currentColor" */
 .nv-icon-green {
-  color: #76b900 !important;
+  color: #EE0000 !important;
 }
 
 /* Constrain spinner SVG inside the research panel toggle tab */

@@ -21,10 +21,10 @@ import { isAuthRequired, AUTH_PROVIDER_ID, TOKEN_REFRESH_BUFFER_SECONDS } from '
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'AI-Q',
-  description: 'AI-powered research assistant',
+  title: 'Red Hat Research',
+  description: 'Red Hat AI-powered research assistant',
   icons: {
-    icon: '/favicon.ico',
+    icon: '/favicon.svg',
   },
 }
 
@@ -50,6 +50,13 @@ const RootLayout = async ({ children }: RootLayoutProps): Promise<ReactNode> => 
   return (
     <html lang="en" id="style-root" suppressHydrationWarning>
       <head>
+        {/* Red Hat fonts from Google Fonts */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;600;700&family=Red+Hat+Text:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
         {/* CDN SVG icon loader - inlines <svg data-src="..."> elements */}
         <script
           src="https://unpkg.com/external-svg-loader@1.6.8/svg-loader.min.js"
