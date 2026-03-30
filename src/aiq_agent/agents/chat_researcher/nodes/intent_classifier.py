@@ -86,10 +86,9 @@ class IntentClassifier:
             return load_prompt(Path(__file__).parent.parent / "prompts", "intent_classification.j2")
         except Exception:
             return (
-                "/no_think\n\n"
                 "You are an Orchestrator. Classify intent as 'meta' or 'research'.\n"
                 "If meta, provide 'meta_response'. If research, provide 'research_depth'.\n"
-                "Respond ONLY with JSON."
+                "Respond concisely with only valid JSON, no explanation."
             )
 
     async def run(self, state: ChatResearcherState) -> dict[str, Any]:

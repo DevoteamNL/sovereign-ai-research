@@ -40,6 +40,20 @@ def _extract_env_var(value: str) -> str | None:
     return None
 
 
+def _is_local_or_private_endpoint(llm_config: dict[str, Any]) -> bool:
+    """Check if the LLM is configured to use a local or private endpoint (e.g. vLLM)."""
+    base_url = llm_config.get("base_url", "")
+    if isinstance(base_url, str):
+        # Resolve env var references like ${VLLM_BASE_URL:-http://localhost:8000}
+        default_match = re.match(r"\$\{[^:}]+(:-([^}]+))?\}", base_url)
+        url_to_check = default_match.group(2) if default_match else base_url
+        if url_to_check:
+            return any(
+                host in url_to_check for host in ("localhost", "127.0.0.1", "0.0.0.0", "10.", "192.168.", "172.")
+            )
+    return False
+
+
 def _get_llm_api_key_requirements(llm_config: dict[str, Any]) -> list[str]:
     """
     Determine required API keys for an LLM configuration.
@@ -61,6 +75,10 @@ def _get_llm_api_key_requirements(llm_config: dict[str, Any]) -> list[str]:
             # If config specifies an env var, that's the required key
             return [env_var]
         # If api_key is a literal value, no env var needed
+        return []
+
+    # Local/private endpoints (vLLM, TGI, etc.) typically don't require API keys
+    if _is_local_or_private_endpoint(llm_config):
         return []
 
     return required_keys

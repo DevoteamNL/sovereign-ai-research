@@ -20,7 +20,7 @@ The current architecture uses NVIDIA NIM endpoints (`_type: nim`, `base_url: htt
 
 ## Migration Phases
 
-### Phase 1 — New config file (zero code changes)
+### Phase 1 — New config file (zero code changes) [DONE]
 
 Create `configs/config_web_vllm.yml` using `_type: openai` pointing to external vLLM:
 
@@ -53,7 +53,7 @@ llms:
 
 Switch at deploy time: `CONFIG_FILE=configs/config_web_vllm.yml`
 
-### Phase 2 — Update config validation (small code change)
+### Phase 2 — Update config validation (small code change) [DONE]
 
 File: `src/aiq_agent/common/config_validation.py`
 
@@ -61,7 +61,7 @@ File: `src/aiq_agent/common/config_validation.py`
 - Make API key validation optional when `base_url` points to a local/private endpoint
 - The current `LLM_API_KEY_MAP` maps `_type` → required env vars; extend it for vLLM
 
-### Phase 3 — Remove `enable_thinking` dependency
+### Phase 3 — Remove `enable_thinking` dependency [DONE]
 
 The `chat_template_kwargs: enable_thinking: true` is NIM-specific. vLLM models that support extended thinking use different mechanisms (e.g., `<think>` tokens in prompt, or model-native reasoning).
 
@@ -79,7 +79,7 @@ Add a frontend dropdown to choose model configurations at runtime rather than be
 - Frontend UI component in Settings panel
 - Runtime config switching without server restart
 
-### Phase 5 — Clean up Nemotron-specific thinking tokens
+### Phase 5 — Clean up Nemotron-specific thinking tokens [DONE]
 
 There are three distinct "thinking" concepts in the codebase:
 
