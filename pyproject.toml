@@ -43,6 +43,15 @@ dependencies = [
     "aiofiles>=23.0.0",
     "python-multipart>=0.0.9",
     "knowledge-layer[all]",
+    # Minimum version pins to address known vulnerabilities (transitive deps)
+    "langchain-core>=1.2.22",  # CVE: path traversal in legacy load_prompt
+    "langgraph>=1.0.10",       # CVE: unsafe msgpack deserialization in checkpoints
+    "pyasn1>=0.6.3",           # CVE: DoS via unbounded recursion
+    "cryptography>=46.0.6",    # CVE: incomplete DNS name constraint enforcement
+    "pypdf>=6.9.2",            # Multiple DoS CVEs (infinite loops, memory exhaustion)
+    # "requests>=2.33.0" — blocked by ragaai-catalyst pinning requests<2.33
+    "Pygments>=2.20.0",        # CVE: ReDoS in GUID matching
+    "nltk>=3.9.4",             # CVE: XSS in NLTK
 ]
 
 [project.optional-dependencies]
