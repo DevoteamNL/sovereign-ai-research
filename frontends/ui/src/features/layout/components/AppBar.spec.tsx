@@ -28,7 +28,7 @@ describe('AppBar', () => {
   test('renders logo and title', () => {
     render(<AppBar />)
 
-    expect(screen.getByText('AI-Q')).toBeInTheDocument()
+    expect(screen.getByText('Red Hat Research')).toBeInTheDocument()
   })
 
   test('renders sessions label beside the menu button', () => {

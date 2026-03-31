@@ -46,7 +46,7 @@ describe('ChatArea', () => {
   test('renders welcome state when not authenticated', () => {
     render(<ChatArea isAuthenticated={false} />)
 
-    expect(screen.getByText('Welcome to AI-Q')).toBeInTheDocument()
+    expect(screen.getByText('Welcome to Red Hat Research')).toBeInTheDocument()
     expect(screen.getByText(/sign in with your account/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /sign in with.*sso/i })).toBeInTheDocument()
   })
@@ -54,7 +54,7 @@ describe('ChatArea', () => {
   test('renders welcome state when authenticated with no messages', () => {
     render(<ChatArea isAuthenticated={true} />)
 
-    expect(screen.getByText('Welcome to AI-Q')).toBeInTheDocument()
+    expect(screen.getByText('Welcome to Red Hat Research')).toBeInTheDocument()
     expect(screen.getByText(/AI-powered research companion/i)).toBeInTheDocument()
   })
 
@@ -242,7 +242,7 @@ describe('ChatArea', () => {
     render(<ChatArea isAuthenticated={true} />)
 
     // Should show welcome state since assistant messages are filtered out
-    expect(screen.getByText('Welcome to AI-Q')).toBeInTheDocument()
+    expect(screen.getByText('Welcome to Red Hat Research')).toBeInTheDocument()
   })
 
   test('renders chat messages area with aria-label', () => {
@@ -264,7 +264,7 @@ describe('ChatArea', () => {
     render(<ChatArea isAuthenticated={true} />)
 
     // Should render welcome state
-    expect(screen.getByText('Welcome to AI-Q')).toBeInTheDocument()
+    expect(screen.getByText('Welcome to Red Hat Research')).toBeInTheDocument()
   })
 
   test('renders file upload banners', () => {
