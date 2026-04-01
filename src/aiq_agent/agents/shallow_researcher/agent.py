@@ -312,7 +312,10 @@ class ShallowResearcherAgent:
                     )
                     content = verification.verified_report
                 else:
-                    raise EmptySourceRegistryError("shallow research")
+                    raise EmptySourceRegistryError(
+                        "shallow research",
+                        had_model_response=bool(content.strip()),
+                    )
 
                 # Step 2: sanitize report (strip body URLs, shortened URLs, unsafe URLs)
                 sanitization = sanitize_report(content)

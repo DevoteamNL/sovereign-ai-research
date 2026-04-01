@@ -483,7 +483,10 @@ class DeepResearcherAgent:
                     )
                 final_message = verification.verified_report
             else:
-                raise EmptySourceRegistryError("deep research")
+                raise EmptySourceRegistryError(
+                    "deep research",
+                    had_model_response=bool(final_message and final_message.strip()),
+                )
 
             # Post-process: sanitize report (strip body URLs, shortened URLs, unsafe URLs)
             sanitization = sanitize_report(final_message)

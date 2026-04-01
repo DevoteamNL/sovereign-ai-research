@@ -71,15 +71,31 @@ class CitationVerificationResult:
 
 
 class EmptySourceRegistryError(Exception):
-    """Raised when no sources were captured during research."""
+    """Raised when no sources were captured during research.
 
-    def __init__(self, agent_type: str = "research") -> None:
+    Attributes:
+        agent_type: The research agent that raised the error (e.g., "shallow research").
+        had_model_response: True if the model generated a response but without calling
+            tools — indicates the model hallucinated citations from parametric memory
+            instead of using search tools.
+    """
+
+    def __init__(self, agent_type: str = "research", *, had_model_response: bool = False) -> None:
         self.agent_type = agent_type
-        super().__init__(
-            f"Research failed: no sources were captured during {agent_type}. "
-            "All tool calls may have failed or returned no results. "
-            "Please try again."
-        )
+        self.had_model_response = had_model_response
+        if had_model_response:
+            detail = (
+                f"Citation verification rejected the {agent_type} response: the model "
+                "generated an answer without using search tools, so citations could not "
+                "be verified against real sources."
+            )
+        else:
+            detail = (
+                f"Research failed: no sources were captured during {agent_type}. "
+                "All tool calls may have failed or returned no results. "
+                "Please try again."
+            )
+        super().__init__(detail)
 
 
 _TRACKING_PARAMS = frozenset(
