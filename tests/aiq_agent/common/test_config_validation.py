@@ -4,13 +4,16 @@
 """Tests for config_validation, focusing on local endpoint detection and API key requirements."""
 
 import os
+from unittest.mock import AsyncMock
 from unittest.mock import patch
 
 import pytest
 
+from aiq_agent.common.config_validation import _extract_env_var
 from aiq_agent.common.config_validation import _get_llm_api_key_requirements
 from aiq_agent.common.config_validation import _is_local_or_private_endpoint
 from aiq_agent.common.config_validation import validate_llm_configs
+from aiq_agent.common.config_validation import validate_llm_endpoints
 
 
 class TestIsLocalOrPrivateEndpoint:
@@ -188,3 +191,227 @@ class TestValidateLlmConfigs:
         valid, missing = validate_llm_configs(config)
         assert valid is True
         assert missing == []
+
+    def test_maas_endpoint_with_api_key_default(self):
+        """MaaS endpoint with ${VLLM_API_KEY:-no-key} should not require any env var."""
+        config = {
+            "llms": {
+                "researcher_llm": {
+                    "_type": "openai",
+                    "model_name": "qwen3-14b",
+                    "base_url": "https://litellm-prod.apps.maas.example.com/v1",
+                    "api_key": "${VLLM_API_KEY:-no-key}",  # pragma: allowlist secret
+                },
+            }
+        }
+        valid, missing = validate_llm_configs(config)
+        assert valid is True
+        assert missing == []
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_maas_endpoint_env_var_no_default_missing(self):
+        """MaaS endpoint with ${VLLM_API_KEY} (no default) should require the env var."""
+        config = {
+            "llms": {
+                "researcher_llm": {
+                    "_type": "openai",
+                    "model_name": "qwen3-14b",
+                    "base_url": "https://litellm-prod.apps.maas.example.com/v1",
+                    "api_key": "${VLLM_API_KEY}",
+                },
+            }
+        }
+        valid, missing = validate_llm_configs(config)
+        assert valid is False
+        assert "VLLM_API_KEY" in missing
+
+    @patch.dict(os.environ, {"VLLM_API_KEY": "sk-test-key"})  # pragma: allowlist secret
+    def test_maas_endpoint_env_var_no_default_present(self):
+        """MaaS endpoint with ${VLLM_API_KEY} set in env should pass."""
+        config = {
+            "llms": {
+                "researcher_llm": {
+                    "_type": "openai",
+                    "model_name": "qwen3-14b",
+                    "base_url": "https://litellm-prod.apps.maas.example.com/v1",
+                    "api_key": "${VLLM_API_KEY}",
+                },
+            }
+        }
+        valid, missing = validate_llm_configs(config)
+        assert valid is True
+        assert missing == []
+
+
+class TestExtractEnvVar:
+    """Tests for _extract_env_var()."""
+
+    def test_simple_env_var(self):
+        name, default = _extract_env_var("${MY_KEY}")
+        assert name == "MY_KEY"
+        assert default is None
+
+    def test_env_var_with_default(self):
+        name, default = _extract_env_var("${VLLM_API_KEY:-no-key}")
+        assert name == "VLLM_API_KEY"
+        assert default == "no-key"
+
+    def test_env_var_with_empty_default(self):
+        name, default = _extract_env_var("${VLLM_API_KEY:-}")
+        assert name == "VLLM_API_KEY"
+        assert default == ""
+
+    def test_env_var_with_url_default(self):
+        name, default = _extract_env_var("${VLLM_BASE_URL:-http://localhost:8000}")
+        assert name == "VLLM_BASE_URL"
+        assert default == "http://localhost:8000"
+
+    def test_literal_value(self):
+        name, default = _extract_env_var("sk-literal-key")
+        assert name is None
+        assert default is None
+
+    def test_empty_string(self):
+        name, default = _extract_env_var("")
+        assert name is None
+        assert default is None
+
+    def test_non_string(self):
+        name, default = _extract_env_var(12345)
+        assert name is None
+        assert default is None
+
+
+class TestValidateLlmEndpoints:
+    """Tests for validate_llm_endpoints() with mocked HTTP responses."""
+
+    @pytest.fixture
+    def vllm_config(self):
+        """A vLLM-style config with deep research agent."""
+        return {
+            "llms": {
+                "intent_llm": {
+                    "_type": "openai",
+                    "model_name": "granite-3-2-8b-instruct",
+                    "base_url": "http://localhost:9999/v1",
+                    "api_key": "test-key",  # pragma: allowlist secret
+                },
+                "orchestrator_llm": {
+                    "_type": "openai",
+                    "model_name": "qwen3-14b",
+                    "base_url": "http://localhost:9999/v1",
+                    "api_key": "test-key",  # pragma: allowlist secret
+                    "max_tokens": 128000,
+                },
+            },
+            "functions": {
+                "deep_research_agent": {
+                    "_type": "deep_research_agent",
+                    "orchestrator_llm": "orchestrator_llm",
+                    "researcher_llm": "intent_llm",
+                    "planner_llm": "orchestrator_llm",
+                }
+            },
+        }
+
+    @pytest.mark.asyncio
+    async def test_unreachable_endpoint(self, vllm_config):
+        """Unreachable endpoint produces a warning."""
+        mock_probe = AsyncMock(return_value={"reachable": False, "models": {}, "error": "Connection refused"})
+        with patch("aiq_agent.common.config_validation._probe_endpoint", mock_probe):
+            warnings = await validate_llm_endpoints(vllm_config)
+        assert len(warnings) == 1
+        assert "unreachable" in warnings[0].lower()
+
+    @pytest.mark.asyncio
+    async def test_reachable_with_missing_model(self, vllm_config):
+        """Reachable endpoint but model not found."""
+        mock_probe = AsyncMock(return_value={"reachable": True, "models": {"some-other-model": {}}, "error": None})
+        with patch("aiq_agent.common.config_validation._probe_endpoint", mock_probe):
+            warnings = await validate_llm_endpoints(vllm_config)
+        model_warnings = [w for w in warnings if "not found" in w]
+        assert len(model_warnings) == 2
+        missing_models = " ".join(model_warnings)
+        assert "granite-3-2-8b-instruct" in missing_models
+        assert "qwen3-14b" in missing_models
+
+    @pytest.mark.asyncio
+    async def test_reachable_with_small_context_window(self, vllm_config):
+        """Model exists but has a small context window for deep research."""
+        mock_probe = AsyncMock(
+            return_value={
+                "reachable": True,
+                "models": {"granite-3-2-8b-instruct": {}, "qwen3-14b": {}},
+                "error": None,
+            }
+        )
+        mock_ctx = AsyncMock(return_value=16384)
+        with (
+            patch("aiq_agent.common.config_validation._probe_endpoint", mock_probe),
+            patch("aiq_agent.common.config_validation._probe_context_window", mock_ctx),
+        ):
+            warnings = await validate_llm_endpoints(vllm_config)
+        context_warnings = [w for w in warnings if "context window" in w.lower() or "max_tokens" in w.lower()]
+        assert len(context_warnings) >= 1
+
+    @pytest.mark.asyncio
+    async def test_max_tokens_exceeds_context_window(self, vllm_config):
+        """Config max_tokens > context window produces a specific error warning."""
+        mock_probe = AsyncMock(
+            return_value={
+                "reachable": True,
+                "models": {"granite-3-2-8b-instruct": {}, "qwen3-14b": {}},
+                "error": None,
+            }
+        )
+        # Context window is 40960 but config has max_tokens=128000
+        mock_ctx = AsyncMock(return_value=40960)
+        with (
+            patch("aiq_agent.common.config_validation._probe_endpoint", mock_probe),
+            patch("aiq_agent.common.config_validation._probe_context_window", mock_ctx),
+        ):
+            warnings = await validate_llm_endpoints(vllm_config)
+        max_token_warnings = [w for w in warnings if "max_tokens=128,000" in w]
+        assert len(max_token_warnings) == 1
+        assert "400 Bad Request" in max_token_warnings[0]
+
+    @pytest.mark.asyncio
+    async def test_nim_endpoints_skipped(self):
+        """NIM (integrate.api.nvidia.com) endpoints are skipped."""
+        config = {
+            "llms": {
+                "nim_llm": {
+                    "_type": "nim",
+                    "model_name": "nvidia/nemotron",
+                    "base_url": "https://integrate.api.nvidia.com/v1",
+                }
+            },
+            "functions": {},
+        }
+        warnings = await validate_llm_endpoints(config)
+        assert warnings == []
+
+    @pytest.mark.asyncio
+    async def test_all_checks_pass(self, vllm_config):
+        """All checks pass when endpoint is reachable and models exist with large context."""
+        mock_probe = AsyncMock(
+            return_value={
+                "reachable": True,
+                "models": {"granite-3-2-8b-instruct": {}, "qwen3-14b": {}},
+                "error": None,
+            }
+        )
+        # Return None = context window is large enough (no error from probe)
+        mock_ctx = AsyncMock(return_value=None)
+        with (
+            patch("aiq_agent.common.config_validation._probe_endpoint", mock_probe),
+            patch("aiq_agent.common.config_validation._probe_context_window", mock_ctx),
+        ):
+            warnings = await validate_llm_endpoints(vllm_config)
+        assert warnings == []
+
+    @pytest.mark.asyncio
+    async def test_empty_config(self):
+        """Empty config produces no warnings."""
+        warnings = await validate_llm_endpoints({})
+        assert warnings == []

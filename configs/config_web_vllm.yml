@@ -64,7 +64,7 @@ llms:
     api_key: ${VLLM_API_KEY:-no-key}
     temperature: 1.0
     top_p: 1.0
-    max_tokens: 128000
+    max_tokens: ${VLLM_ORCHESTRATOR_MAX_TOKENS:-128000}
 
   # Document summarization — small, fast model
   summary_llm:

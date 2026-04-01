@@ -97,17 +97,87 @@ Tool-calling capability is critical for the researcher and orchestrator roles. E
 ```
 
 
+## Model-as-a-Service (MaaS) and API Gateways
+
+The vLLM config works with any OpenAI-compatible endpoint, including managed services behind API gateways such as:
+
+- **Red Hat Model-as-a-Service** (LiteLLM on OpenShift)
+- **LiteLLM Proxy** — multi-model gateway with auth and rate limiting
+- **Azure OpenAI** — Microsoft's hosted OpenAI-compatible service
+- **Any LLM gateway** that exposes `/v1/chat/completions`
+
+### Example: Red Hat MaaS
+
+```bash
+# deploy/.env
+VLLM_BASE_URL=https://litellm-prod.apps.maas.redhatworkshops.io
+VLLM_API_KEY=sk-your-api-key
+VLLM_INTENT_MODEL=granite-3-2-8b-instruct
+VLLM_RESEARCHER_MODEL=qwen3-14b
+VLLM_ORCHESTRATOR_MODEL=qwen3-14b
+VLLM_SUMMARY_MODEL=granite-3-2-8b-instruct
+VLLM_ORCHESTRATOR_MAX_TOKENS=16384
+```
+
+Then start with the vLLM config:
+
+```bash
+nat serve --config_file configs/config_web_vllm.yml
+```
+
+### Key Difference from Local vLLM
+
+Local vLLM typically does not require an API key, so the default `api_key: ${VLLM_API_KEY:-no-key}` works without setting anything. MaaS endpoints require a real key — set `VLLM_API_KEY` in your `.env` file or environment.
+
+The config validator handles both cases: if the `api_key` field has a non-empty default (like `no-key`), the env var is treated as optional. If no default is provided (e.g., `${VLLM_API_KEY}`), the validator requires it to be set.
+
+
 ## Config Validation and API Keys
 
-The config validator (`src/aiq_agent/common/config_validation.py`) detects local and private endpoints and skips API key requirements for them.
+The config validator (`src/aiq_agent/common/config_validation.py`) performs two stages of validation at startup:
+
+### Stage 1: API Key Validation (Synchronous)
+
+Checks that required API keys are present in the environment.
+
+**Rules:**
+- `_type: nim` → requires `NVIDIA_API_KEY`
+- `_type: openai` with cloud `base_url` → requires `OPENAI_API_KEY`
+- `_type: openai` with local/private `base_url` → no key required
+- Explicit `api_key: ${VAR:-default}` with a non-empty default → no env var required
+- Explicit `api_key: ${VAR}` without default → `VAR` must be set
 
 **Private endpoint heuristic:** If `base_url` resolves to any of these hosts, the API key check is skipped:
 - `localhost`, `127.0.0.1`, `0.0.0.0`
 - `10.x.x.x`, `192.168.x.x`, `172.x.x.x` (RFC 1918 private ranges)
 
-**When keys ARE still required:** If `base_url` points to a cloud endpoint (e.g., `https://api.openai.com/v1`), the validator requires `OPENAI_API_KEY` to be set.
+### Stage 2: Endpoint Probing (Async, Non-blocking)
 
-The `api_key: ${VLLM_API_KEY:-no-key}` default in the vLLM config works because vLLM accepts any string when authentication is disabled.
+After API key validation, the system probes each configured OpenAI-compatible endpoint. This runs during startup and logs warnings but does not block the application.
+
+**Checks performed:**
+1. **Endpoint reachability** — `GET /v1/models` to verify the server is accessible
+2. **Model availability** — configured `model_name` values are cross-checked against the endpoint's reported model list
+3. **Context window validation** — for LLMs assigned to deep research roles (orchestrator, planner, researcher), the validator probes the model's context window and warns if:
+   - The context window is below 32,768 tokens (minimum recommended for deep research)
+   - The configured `max_tokens` exceeds the model's actual context window (which causes `400 Bad Request` at runtime)
+
+**Example startup warnings:**
+```
+WARNING - Endpoint validation: Model 'qwen3-14b' (configured as 'orchestrator_llm')
+  not found on https://maas.example.com. Available models: granite-3-2-8b-instruct
+
+WARNING - Endpoint validation: Config error: 'orchestrator_llm' has max_tokens=128,000
+  but model 'qwen3-14b' only supports 40,960 tokens. Requests will fail with 400 Bad
+  Request. Reduce max_tokens or use VLLM_ORCHESTRATOR_MAX_TOKENS.
+
+WARNING - Endpoint validation: Deep research may be unreliable: 'orchestrator_llm' uses
+  model 'qwen3-14b' with a 16,384-token context window (minimum recommended: 32,768).
+```
+
+```{note}
+NIM endpoints (`https://integrate.api.nvidia.com`) are skipped during probing since they do not support the standard `/v1/models` listing in the same way.
+```
 
 
 ## Model-Aware Thinking Prefixes
@@ -183,6 +253,48 @@ llms:
 This is useful when you want hosted NIM for latency-sensitive paths (intent classification) but local vLLM for research tasks where data stays on-premise.
 
 
+## Deep Research: Model Requirements and Limitations
+
+Deep research is the most demanding agent path. It involves multi-loop orchestration, parallel tool calling, source aggregation, and long-form report generation. The orchestrator and planner LLMs carry the heaviest load.
+
+### Minimum Requirements for Deep Research
+
+| Requirement | Minimum | Recommended | Why |
+|-------------|---------|-------------|-----|
+| Context window | 32k tokens | 128k+ tokens | Multi-source aggregation and report writing |
+| Model size | 14B+ | 70B+ | Reliable multi-step planning and tool use |
+| Tool calling | Required | Required | Orchestrator must dispatch sub-tasks |
+| Inference speed | Moderate | Fast | Multi-loop = many sequential LLM calls |
+
+### What Happens When Models Are Too Small
+
+During testing with `qwen3-14b` (40k context) on a Red Hat MaaS endpoint:
+
+- **Shallow research worked perfectly** — single-loop, limited context, fast responses
+- **Deep research failed** — the orchestrator hit context window limits during report generation, causing `400 Bad Request` errors from the endpoint
+
+The startup validator now detects this mismatch and logs a warning. If you see these warnings, consider:
+
+1. **Using a larger model** for the orchestrator/planner roles (70B+ with 128k context)
+2. **Reducing `max_tokens`** via `VLLM_ORCHESTRATOR_MAX_TOKENS` to fit within the model's context window
+3. **Disabling deep research** and using only shallow research for smaller deployments
+
+### Configuring max_tokens per Role
+
+The `max_tokens` for the orchestrator is configurable via environment variable:
+
+```yaml
+# In config_web_vllm.yml
+orchestrator_llm:
+  max_tokens: ${VLLM_ORCHESTRATOR_MAX_TOKENS:-128000}
+```
+
+```bash
+# In deploy/.env — cap for smaller models
+VLLM_ORCHESTRATOR_MAX_TOKENS=16384
+```
+
+
 ## Troubleshooting
 
 **Model returns empty responses**
@@ -197,6 +309,12 @@ This is useful when you want hosted NIM for latency-sensitive paths (intent clas
 - Confirm `base_url` resolves to a private IP so validation skips the key check
 - Or set `api_key: no-key` explicitly in the config
 
+**400 Bad Request from deep research**
+- Check startup logs for context window warnings
+- The model's context window may be smaller than `max_tokens` in the config
+- Set `VLLM_ORCHESTRATOR_MAX_TOKENS` to a value within the model's context window
+- Verify with: `curl -H "Authorization: Bearer $VLLM_API_KEY" $VLLM_BASE_URL/v1/models`
+
 **Thinking tokens appearing in output**
 - For non-Nemotron models, the thinking prefix is already empty; the tokens are coming from the model itself
 - For vLLM-served reasoning models, use `--reasoning-parser` flag if available
@@ -204,3 +322,7 @@ This is useful when you want hosted NIM for latency-sensitive paths (intent clas
 **Timeout or connection errors**
 - Check vLLM is running and accessible: `curl http://localhost:8000/v1/models`
 - For remote vLLM, verify firewall rules allow the connection
+
+**MaaS API key errors**
+- Ensure `VLLM_API_KEY` is set in your environment or `.env` file
+- The default `no-key` works for local vLLM but not for authenticated gateways
