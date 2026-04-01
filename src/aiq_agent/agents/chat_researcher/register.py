@@ -161,6 +161,7 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
                 config_dict = yaml.safe_load(raw)
 
             from aiq_agent.common.config_validation import validate_llm_configs
+            from aiq_agent.common.config_validation import validate_llm_endpoints
 
             is_valid, missing_keys = validate_llm_configs(config_dict)
             if not is_valid:
@@ -175,6 +176,11 @@ async def chat_deepresearcher_agent(config: ChatDeepResearcherConfig, builder: B
                 logger.error("Missing required API keys: %s", ", ".join(missing_keys))
                 # Create the error response here to avoid duplication
                 api_key_error_response = _create_chat_response(error_msg, response_id="api_key_error")
+
+            # Probe endpoints: check reachability, model availability, and context window limits
+            endpoint_warnings = await validate_llm_endpoints(config_dict)
+            for warning in endpoint_warnings:
+                logger.warning("Endpoint validation: %s", warning)
         except Exception as e:
             # If validation fails for other reasons (e.g., file can't be read), log but don't block
             logger.debug(f"Failed to validate API keys from config: {e}")

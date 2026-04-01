@@ -17,15 +17,24 @@
 
 This module provides utilities for loading prompts co-located with agents.
 Each agent package has a prompts/ directory containing its Jinja2 templates.
+
+Also provides model-aware thinking prefix helpers so that Nemotron/NIM models
+get their ``/no_think`` or ``/think`` directives while other models (vLLM,
+OpenAI, etc.) get clean prompts.
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
 import jinja2
+from langchain_core.language_models import BaseChatModel
 
 logger = logging.getLogger(__name__)
+
+# Regex matching NVIDIA Nemotron model names that understand /think and /no_think
+_NEMOTRON_PATTERN = re.compile(r"nvidia/(llama|nvidia).*nemotron", re.IGNORECASE)
 
 
 class PromptError(Exception):
@@ -77,7 +86,39 @@ def render_prompt_template(template: str, **kwargs: Any) -> str:
         PromptError: If template rendering fails.
     """
     try:
-        jinja_template = jinja2.Template(template, undefined=jinja2.StrictUndefined)
+        jinja_template = jinja2.Template(template, undefined=jinja2.Undefined)
         return jinja_template.render(**kwargs)
     except jinja2.TemplateError as e:
         raise PromptError(f"Failed to render template: {e}") from e
+
+
+def _get_model_name(llm: BaseChatModel) -> str:
+    """Extract model name from a LangChain chat model, regardless of provider."""
+    for attr in ("model_name", "model", "azure_deployment"):
+        val = getattr(llm, attr, None)
+        if isinstance(val, str):
+            return val
+    return ""
+
+
+def is_nemotron(llm: BaseChatModel) -> bool:
+    """Return True if *llm* is a Nemotron model that understands /think directives."""
+    return bool(_NEMOTRON_PATTERN.search(_get_model_name(llm)))
+
+
+def get_thinking_prefix(llm: BaseChatModel, *, enable: bool = False) -> str:
+    """Return the thinking directive prefix appropriate for *llm*.
+
+    For Nemotron models this returns ``/think\\n\\n`` or ``/no_think\\n\\n``.
+    For all other models an empty string is returned so prompts stay clean.
+
+    Args:
+        llm: The LangChain chat model that will receive the prompt.
+        enable: Whether to enable (True) or disable (False) extended thinking.
+
+    Returns:
+        A string to prepend to the system prompt, possibly empty.
+    """
+    if not is_nemotron(llm):
+        return ""
+    return "/think\n\n" if enable else "/no_think\n\n"

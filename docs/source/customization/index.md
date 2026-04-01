@@ -18,3 +18,6 @@ SPDX-License-Identifier: Apache-2.0
 - **[Knowledge Layer](./knowledge-layer.md)** — Add document retrieval (LlamaIndex or Foundational RAG)
 - **[Prompts](./prompts.md)** — Modify agent behavior through Jinja2 prompt templates
 - **[Human-in-the-Loop](./hitl.md)** — Configure the clarifier and plan approval workflow
+- **[vLLM Migration](./vllm-migration.md)** — Use vLLM or any OpenAI-compatible endpoint instead of NVIDIA NIM
+- **[vLLM Migration Decisions](./vllm-decisions.md)** — Design decisions, trade-offs, and lessons learned
+- **[Rebranding](./rebranding.md)** — Replace NVIDIA branding with your own organization's identity

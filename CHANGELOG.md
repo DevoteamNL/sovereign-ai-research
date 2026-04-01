@@ -1,5 +1,17 @@
 # Change Log
 
+Release v2.1.0-redhat
+
+- Red Hat frontend rebrand: logo (fedora SVG), colors (#76b900 to #EE0000 palette), fonts (Red Hat Display/Text via Google Fonts), app name (AI-Q to Red Hat Research), favicon
+- Remapped KUI design system green and blue palette tokens to Red Hat red via CSS custom property overrides in globals.css
+- New `configs/config_web_vllm.yml`: drop-in config using `_type: openai` for vLLM or any OpenAI-compatible endpoint, with env var overrides for model names and base URL
+- Config validation (`config_validation.py`): skip API key requirement for local/private endpoints (localhost, 10.x, 192.168.x, 172.x)
+- Model-aware thinking prefixes (`get_thinking_prefix()` in `prompt_utils.py`): Nemotron models get `/no_think` or `/think` directives; all other models get clean prompts
+- Removed hardcoded `/no_think` from `plan_generation.j2` template and fallback prompts in `intent_classifier.py` and `clarifier/agent.py`; replaced with runtime model detection
+- WebSocket connection timeout fix: 10-second timeout for stuck CONNECTING state prevents indefinite "Please Wait" hang
+- SSE request body fix: `input_message` to `query` to match backend schema
+- vLLM migration guide, frontend rebranding guide, and blog post documenting the approach
+
 Release v2.0.0
 
 Ground-up rewrite of the NVIDIA AI-Q Blueprint, built on the NVIDIA NeMo Agent Toolkit (NAT).

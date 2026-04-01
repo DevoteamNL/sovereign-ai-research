@@ -20,7 +20,7 @@ The current architecture uses NVIDIA NIM endpoints (`_type: nim`, `base_url: htt
 
 ## Migration Phases
 
-### Phase 1 — New config file (zero code changes)
+### Phase 1 — New config file (zero code changes) [DONE]
 
 Create `configs/config_web_vllm.yml` using `_type: openai` pointing to external vLLM:
 
@@ -53,7 +53,7 @@ llms:
 
 Switch at deploy time: `CONFIG_FILE=configs/config_web_vllm.yml`
 
-### Phase 2 — Update config validation (small code change)
+### Phase 2 — Update config validation (small code change) [DONE]
 
 File: `src/aiq_agent/common/config_validation.py`
 
@@ -61,7 +61,7 @@ File: `src/aiq_agent/common/config_validation.py`
 - Make API key validation optional when `base_url` points to a local/private endpoint
 - The current `LLM_API_KEY_MAP` maps `_type` → required env vars; extend it for vLLM
 
-### Phase 3 — Remove `enable_thinking` dependency
+### Phase 3 — Remove `enable_thinking` dependency [DONE]
 
 The `chat_template_kwargs: enable_thinking: true` is NIM-specific. vLLM models that support extended thinking use different mechanisms (e.g., `<think>` tokens in prompt, or model-native reasoning).
 
@@ -79,7 +79,7 @@ Add a frontend dropdown to choose model configurations at runtime rather than be
 - Frontend UI component in Settings panel
 - Runtime config switching without server restart
 
-### Phase 5 — Clean up Nemotron-specific thinking tokens
+### Phase 5 — Model-aware thinking prefixes [DONE]
 
 There are three distinct "thinking" concepts in the codebase:
 
@@ -89,17 +89,23 @@ There are three distinct "thinking" concepts in the codebase:
 
 3. **`think` tool** — LangChain `@tool` scratchpad used by deep research agent. Model-agnostic, works with any LLM. **No changes needed.**
 
-**Problem:** Several prompt templates have `/no_think` **hardcoded** as literal text. Non-Nemotron models will see this as noise, potentially echoing it in output or getting confused.
+**Solution implemented:** Added `get_thinking_prefix(llm, enable=True/False)` helper in `common/prompt_utils.py`. This inspects the LLM's model name at runtime:
+- Nemotron models → returns `/think\n\n` or `/no_think\n\n`
+- All other models → returns empty string (clean prompt)
 
-**Files requiring cleanup:**
-- `src/aiq_agent/agents/clarifier/agent.py` (lines 76, 84) — fallback prompts start with `/no_think\n\n`
-- `src/aiq_agent/agents/clarifier/prompts/plan_generation.j2` (line 1) — starts with `/no_think`
-- `src/aiq_agent/agents/chat_researcher/nodes/intent_classifier.py` (line 89) — fallback prompt starts with `/no_think\n\n`
+Callers prepend the result to their rendered system prompt. This means:
+- NIM/Nemotron gets the performance benefit of `/no_think` on latency-sensitive paths
+- vLLM/OpenAI/other models get clean prompts with no noise
+- Future model-specific prefixes can be added to `get_thinking_prefix()` without touching agents
 
-**Action items:**
-- Remove hardcoded `/no_think` tokens from prompt templates; replace with natural language ("Respond concisely without showing your reasoning") or remove entirely (most models default to concise output when prompted for JSON)
-- Make thinking opt-in via config flag rather than model name regex, so future reasoning models (DeepSeek-R1, Qwen QwQ) can be supported without matching a Nemotron regex
-- Do NOT reimplement `chat_template_kwargs` — vLLM reasoning models handle extended thinking natively
+**Files changed:**
+- `src/aiq_agent/common/prompt_utils.py` — added `get_thinking_prefix()`, `is_nemotron()`
+- `src/aiq_agent/common/__init__.py` — exported new helpers
+- `src/aiq_agent/agents/chat_researcher/nodes/intent_classifier.py` — uses `get_thinking_prefix(self.llm, enable=False)`
+- `src/aiq_agent/agents/clarifier/agent.py` — uses `get_thinking_prefix()` for both clarification and plan generation prompts
+- `src/aiq_agent/agents/clarifier/prompts/plan_generation.j2` — removed hardcoded `/no_think`
+
+**Future extension:** To add model-specific prompts for other models (e.g., DeepSeek-R1, Qwen QwQ), extend `get_thinking_prefix()` with additional regex patterns and return the appropriate directive.
 
 ## Key Files
 

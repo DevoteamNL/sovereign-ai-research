@@ -68,6 +68,22 @@ The NVIDIA AI-Q Blueprint is an enterprise-grade research agent built on the [NV
 - **Deployment options** - Deployment assets for a [docker compose](deploy/compose/) as well as [helm deployment](deploy/helm/deployment-k8s/).
 
 
+## Fork Customizations
+
+This fork extends the upstream AI-Q Blueprint with:
+
+- **Red Hat rebrand** — Logo, colors, fonts, and app name replaced throughout the Next.js frontend. See the [Rebranding Guide](docs/source/customization/rebranding.md).
+- **vLLM / open model support** — New `configs/config_web_vllm.yml` config that uses `_type: openai` to connect to any OpenAI-compatible endpoint (vLLM, TGI, etc.) instead of NVIDIA NIM. Model-aware thinking prefixes preserve Nemotron performance while giving clean prompts to other models. See the [vLLM Migration Guide](docs/source/customization/vllm-migration.md).
+- **Config validation improvements** — API key checks skip local/private endpoints automatically, so `NVIDIA_API_KEY` is not required when running against local vLLM.
+
+**Quick start with vLLM:**
+
+```bash
+export VLLM_BASE_URL=http://localhost:8000
+CONFIG_FILE=configs/config_web_vllm.yml nat serve
+```
+
+
 ## Software Components
 
 The following are used by this project in the default configuration:

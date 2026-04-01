@@ -52,6 +52,8 @@ from .json_utils import extract_json
 from .llm_provider import LLMProvider
 from .llm_provider import LLMRole
 from .message_utils import get_latest_user_query
+from .prompt_utils import get_thinking_prefix
+from .prompt_utils import is_nemotron
 from .prompt_utils import load_prompt
 from .prompt_utils import render_prompt_template
 from .tool_validation import format_tool_unavailability_error
@@ -75,7 +77,9 @@ __all__ = [
     "format_data_source_tools",
     "format_tool_unavailability_error",
     "get_checkpointer",
+    "get_thinking_prefix",
     "get_or_create_session_registry",
+    "is_nemotron",
     "get_session_registry",
     "get_latest_user_query",
     "is_postgres_dsn",
