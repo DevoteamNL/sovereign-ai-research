@@ -244,6 +244,9 @@ class TestIsNemotron:
             "nvidia/llama-3.1-nemotron-70b-instruct",
             "nvidia/nvidia-nemotron-3-nano-30b-a3b",
             "nvidia/llama-nemotron-mini-4b-instruct",
+            # vLLM --served-model-name variants (no HF org prefix after nvidia/)
+            "nvidia/nemotron-3-nano-30b-a3b",
+            "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
         ],
     )
     def test_nemotron_models_detected(self, model_name):

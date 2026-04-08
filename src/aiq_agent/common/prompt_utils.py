@@ -33,8 +33,10 @@ from langchain_core.language_models import BaseChatModel
 
 logger = logging.getLogger(__name__)
 
-# Regex matching NVIDIA Nemotron model names that understand /think and /no_think
-_NEMOTRON_PATTERN = re.compile(r"nvidia/(llama|nvidia).*nemotron", re.IGNORECASE)
+# Regex matching NVIDIA Nemotron model names that understand /think and /no_think.
+# Matches HF names (nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16) and vLLM served
+# names (nvidia/nemotron-3-nano-30b-a3b) alike.
+_NEMOTRON_PATTERN = re.compile(r"(nvidia[/-])?.*nemotron", re.IGNORECASE)
 
 
 class PromptError(Exception):
