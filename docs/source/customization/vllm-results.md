@@ -17,13 +17,16 @@ Comparative results from testing open models with the AI-Q Blueprint. All local 
 |---|---|---|---|---|
 | **Hosting** | Local (DGX Spark) | Local (DGX Spark) | Local (DGX Spark) | Remote (Red Hat MaaS) |
 | **Params** | 30B / 3B active | 26B / 4B active | 35B / 3B active | ~1T / ~32B active |
-| **Context** | 131k | 8k (limited by memory) | 8k (limited by memory) | 262k |
-| **Gen throughput** | ~29 tok/s | ~7 tok/s | ~30 tok/s | ~101 tok/s |
+| **vLLM image** | NGC 0.13.0 | Upstream 0.19.0 | Upstream 0.19.0 | Server-side |
+| **Context** | 131k | 8k | 32k (`--enforce-eager`) | 262k |
+| **Gen throughput** | ~29 tok/s | ~7 tok/s | ~28-30 tok/s | ~101 tok/s |
 | **Tool calling** | Works (`qwen3_coder`) | Broken (no parser) | Works (`qwen3_coder` + `deepseek_r1`) | Works (native `kimi_k2`) |
+| **Tool call latency** | ~2-3s | N/A | ~14s warm, ~51s cold | ~0.95s |
 | **Shallow research** | Works | Fails | Works | Works |
-| **Deep research** | Works | Fails (8k too small) | Limited (8k too small) | Works (262k) |
+| **Deep research** | Works | Fails (8k too small) | Short reports (32k) | Works (262k) |
 | **Thinking tokens** | Leak without reasoning parser | None | Separated via `deepseek_r1` | Separated natively |
-| **GPU memory** | ~85 GB | ~68 GB | ~67 GB | N/A (remote) |
+| **GPU memory** | ~85 GB | ~68 GB | ~90 GB | N/A (remote) |
+| **KV cache** | 23 GiB / 800k tokens | 60 GiB / 263k tokens | 39 GiB / 514k tokens | N/A |
 | **License** | NVIDIA custom | Apache-2.0 | Apache-2.0 | MIT |
 
 ---
