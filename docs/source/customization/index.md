@@ -20,6 +20,7 @@ SPDX-License-Identifier: Apache-2.0
 - **[Human-in-the-Loop](./hitl.md)** — Configure the clarifier and plan approval workflow
 - **[vLLM Migration](./vllm-migration.md)** — Use vLLM or any OpenAI-compatible endpoint instead of NVIDIA NIM
 - **[vLLM Model Recipes](./vllm-recipes.md)** — Tested model configurations with Docker commands, env settings, and performance data
+- **[vLLM Test Results](./vllm-results.md)** — Comparative benchmarks across all tested models
 - **[MaaS: Kimi K2.5](./maas-kimi-k25.md)** — Detailed deployment and K8s admin guide for Kimi K2.5 on Red Hat MaaS
 - **[vLLM Migration Decisions](./vllm-decisions.md)** — Design decisions, trade-offs, and lessons learned
 - **[Rebranding](./rebranding.md)** — Replace NVIDIA branding with your own organization's identity
