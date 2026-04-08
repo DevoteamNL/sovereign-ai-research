@@ -37,11 +37,11 @@ general:
 
 llms:
   # Intent classification — fast, small model
-  # Set VLLM_INTENT_BASE_URL to use a separate vLLM instance (mixed-model setup)
+  # For mixed-model setups, override base_url in deploy/.env per-role
   intent_llm:
     _type: openai
     model_name: ${VLLM_INTENT_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
-    base_url: ${VLLM_INTENT_BASE_URL:-http://localhost:8000}/v1
+    base_url: ${VLLM_BASE_URL:-http://localhost:8000}/v1
     api_key: ${VLLM_API_KEY:-no-key}
     temperature: 0.5
     top_p: 0.9
