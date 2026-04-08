@@ -199,10 +199,19 @@ class ChatResearcherAgent:
                 result = await self.shallow_research_fn(shallow_state)
             except EmptySourceRegistryError as source_err:
                 logger.warning(
-                    "Shallow research produced no verifiable sources (had_model_response=%s)",
+                    "Shallow research produced no verifiable sources (had_model_response=%s, tool_errors=%d)",
                     source_err.had_model_response,
+                    len(source_err.tool_errors),
                 )
-                if source_err.had_model_response:
+                if source_err.tool_errors:
+                    # Tools were called but returned errors (API quota, network, etc.)
+                    err_msg = (
+                        "The search tools encountered errors and could not complete your request. "
+                        "Details: " + "; ".join(source_err.tool_errors[:3]) + ". "
+                        "This may be due to an API quota limit, a temporary service outage, "
+                        "or a misconfigured API key. Please check your API keys and try again later."
+                    )
+                elif source_err.had_model_response:
                     err_msg = (
                         "Citation verification rejected the response because the model answered "
                         "from memory without consulting search tools. All citations were unverifiable. "
@@ -280,10 +289,18 @@ class ChatResearcherAgent:
                 result = await self.deep_research_fn(deep_state)
             except EmptySourceRegistryError as source_err:
                 logger.warning(
-                    "Deep research produced no verifiable sources (had_model_response=%s)",
+                    "Deep research produced no verifiable sources (had_model_response=%s, tool_errors=%d)",
                     source_err.had_model_response,
+                    len(source_err.tool_errors),
                 )
-                if source_err.had_model_response:
+                if source_err.tool_errors:
+                    err_msg = (
+                        "The search tools encountered errors during deep research. "
+                        "Details: " + "; ".join(source_err.tool_errors[:3]) + ". "
+                        "This may be due to an API quota limit, a temporary service outage, "
+                        "or a misconfigured API key. Please check your API keys and try again later."
+                    )
+                elif source_err.had_model_response:
                     err_msg = (
                         "Citation verification rejected the deep research report because it contained "
                         "unverifiable sources. The model may have generated citations from memory "

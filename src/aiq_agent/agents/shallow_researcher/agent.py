@@ -312,9 +312,19 @@ class ShallowResearcherAgent:
                     )
                     content = verification.verified_report
                 else:
+                    # Check if tools were called but returned errors
+                    # (e.g., API quota exhausted, network failure)
+                    tool_errors = []
+                    for msg in validated_result["messages"]:
+                        if hasattr(msg, "type") and msg.type == "tool":
+                            tool_content = str(getattr(msg, "content", ""))
+                            if "error" in tool_content.lower():
+                                tool_errors.append(tool_content.strip())
+
                     raise EmptySourceRegistryError(
                         "shallow research",
                         had_model_response=bool(content.strip()),
+                        tool_errors=tool_errors,
                     )
 
                 # Step 2: sanitize report (strip body URLs, shortened URLs, unsafe URLs)
