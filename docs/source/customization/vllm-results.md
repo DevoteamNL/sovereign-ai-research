@@ -73,16 +73,26 @@ Comparative results from testing open models with the AI-Q Blueprint. All local 
 | vLLM image | `vllm/vllm-openai:latest` (v0.19.0) + transformers 5.5.0 |
 | Weight size | ~67 GB (BF16) |
 | GPU memory used | ~90 GB of 128 GB |
-| KV cache | 38.35 GiB / 501,600 tokens |
-| Prompt throughput | ~62 tok/s |
-| Generation throughput | ~30 tok/s |
+| KV cache | 39-42 GiB (depends on `--enforce-eager`) |
+| Generation throughput | ~28-30 tok/s |
 | Attention backend | TRITON_ATTN |
 | Tool call parser | `qwen3_coder` + `deepseek_r1` reasoning parser |
-| Context window | 8,192 tokens (limited by CUDA graph memory) |
-| Model load time | ~20 min download + ~1 min shard loading + ~2 min compile |
+| Model load time | ~20 min download + ~1.5 min shard loading |
 
-**Strengths:** Fast generation (~30 tok/s), tool calling works with correct parser combo, thinking tokens properly separated. Best local model for shallow research.
-**Weaknesses:** Context limited to 8k on upstream vLLM (same CUDA graph memory issue as Gemma 4). Deep research limited by small context. Requires both `--tool-call-parser qwen3_coder` AND `--reasoning-parser deepseek_r1` — without the reasoning parser, `<think>` tags break tool call parsing.
+#### Context Window vs CUDA Graph Tradeoff
+
+The upstream vLLM 0.19.0 image uses 30-40GB for CUDA graph compilation. Adding `--enforce-eager` disables CUDA graphs, freeing that memory for KV cache but increasing first-token latency.
+
+| Config | Context | KV Cache | Tool call latency | Gen throughput | Deep research |
+|--------|---------|----------|-------------------|----------------|---------------|
+| CUDA graphs (default) | 8,192 | 38 GiB | ~2-3s | ~30 tok/s | Fails (too small) |
+| `--enforce-eager`, 32k | **32,768** | 39 GiB | ~14s (warm) | ~28 tok/s | Short reports |
+| `--enforce-eager`, 64k | 65,536 | 42 GiB | ~51s (cold) | ~29 tok/s | Full reports |
+
+**Recommended:** `--enforce-eager` with 32k context — balances usable deep research with acceptable latency.
+
+**Strengths:** Fast generation (~28-30 tok/s), tool calling works with correct parser combo, thinking tokens properly separated. Best local model for research with tool calling. `--enforce-eager` unlocks 32-64k context.
+**Weaknesses:** `--enforce-eager` increases first-token latency significantly (~14s warm, ~51s cold). Requires both `--tool-call-parser qwen3_coder` AND `--reasoning-parser deepseek_r1` — without the reasoning parser, `<think>` tags break tool call parsing.
 
 ### Kimi K2.5 (Red Hat MaaS, remote)
 

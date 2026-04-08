@@ -165,6 +165,82 @@ VLLM_ORCHESTRATOR_MAX_TOKENS=4096
 
 ---
 
+## Qwen3.5-35B-A3B (BF16)
+
+| | |
+|---|---|
+| **Model** | `Qwen/Qwen3.5-35B-A3B` |
+| **Architecture** | MoE (36B total, 3B active) — 256 experts, Mamba-Transformer hybrid |
+| **Context window** | 262k native (32k recommended on DGX Spark) |
+| **License** | Apache 2.0 |
+| **HuggingFace** | [Qwen/Qwen3.5-35B-A3B](https://huggingface.co/Qwen/Qwen3.5-35B-A3B) |
+
+### GPU: NVIDIA DGX Spark (GB10, 128GB unified)
+
+**Docker command:**
+
+```bash
+docker run --privileged --gpus all -d --rm \
+  --name vllm-qwen \
+  --network host --ipc=host \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  --entrypoint "" \
+  vllm/vllm-openai:latest \
+  bash -c "pip install --upgrade transformers 2>&1 | tail -3 && \
+  python3 -m vllm.entrypoints.openai.api_server \
+  --model Qwen/Qwen3.5-35B-A3B \
+  --served-model-name qwen/qwen3.5-35b-a3b \
+  --max-num-seqs 4 \
+  --tensor-parallel-size 1 \
+  --max-model-len 32768 \
+  --port 8080 \
+  --trust-remote-code \
+  --enable-auto-tool-choice \
+  --tool-call-parser qwen3_coder \
+  --reasoning-parser deepseek_r1 \
+  --enforce-eager \
+  --gpu-memory-utilization 0.90"
+```
+
+**deploy/.env:**
+
+```bash
+VLLM_BASE_URL=http://localhost:8080
+VLLM_API_KEY=no-key
+VLLM_INTENT_MODEL=qwen/qwen3.5-35b-a3b
+VLLM_RESEARCHER_MODEL=qwen/qwen3.5-35b-a3b
+VLLM_ORCHESTRATOR_MODEL=qwen/qwen3.5-35b-a3b
+VLLM_SUMMARY_MODEL=qwen/qwen3.5-35b-a3b
+VLLM_RESEARCHER_MAX_TOKENS=8192
+VLLM_ORCHESTRATOR_MAX_TOKENS=16000
+```
+
+**Performance:**
+
+| Metric | Value |
+|--------|-------|
+| vLLM image | `vllm/vllm-openai:latest` (v0.19.0) + transformers 5.5.0 |
+| Weight size | ~67 GB (BF16) |
+| GPU memory (weights + KV) | ~90 GB of 128 GB |
+| KV cache | 39 GiB / 514,272 tokens |
+| Generation throughput | ~28-30 tok/s |
+| Tool call latency | ~14s (warm), ~51s (cold) |
+| Attention backend | TRITON_ATTN |
+| Model load time | ~20 min (first download) + ~1.5 min (shard loading) |
+| Shallow research | Works |
+| Deep research | Works at 32k (short reports) |
+| Tool calling | Works (`qwen3_coder` + `deepseek_r1` reasoning parser) |
+
+**Notes:**
+- Requires `--enforce-eager` to unlock context beyond 8k. Without it, CUDA graph compilation consumes all remaining GPU memory, forcing `num_gpu_blocks=0` at 32k+.
+- **Both parsers are required:** `--tool-call-parser qwen3_coder` for tool calls AND `--reasoning-parser deepseek_r1` for thinking token separation. Without the reasoning parser, `<think>` tags appear before `<tool_call>` tags and break tool call parsing.
+- Qwen3.5-35B-A3B is a Feb 2026 model and requires `pip install --upgrade transformers` inside the container (not recognized by the bundled transformers).
+- `--enforce-eager` increases first-token latency significantly but generation throughput is similar (~28-30 tok/s).
+- For 64k context, change `--max-model-len 65536` — tool call latency increases to ~51s but deep research can generate longer reports.
+- Apache 2.0 license — no restrictions.
+
+---
+
 ## Kimi K2.5 — MaaS (Red Hat OpenShift)
 
 | | |
