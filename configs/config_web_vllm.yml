@@ -37,14 +37,15 @@ general:
 
 llms:
   # Intent classification — fast, small model
+  # Set VLLM_INTENT_BASE_URL to use a separate vLLM instance (mixed-model setup)
   intent_llm:
     _type: openai
     model_name: ${VLLM_INTENT_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
-    base_url: ${VLLM_BASE_URL:-http://localhost:8000}/v1
+    base_url: ${VLLM_INTENT_BASE_URL:-http://localhost:8000}/v1
     api_key: ${VLLM_API_KEY:-no-key}
     temperature: 0.5
     top_p: 0.9
-    max_tokens: 4096
+    max_tokens: ${VLLM_INTENT_MAX_TOKENS:-1024}
 
   # Shallow research and general agent work
   researcher_llm:
