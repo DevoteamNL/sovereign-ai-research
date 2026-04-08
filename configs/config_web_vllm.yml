@@ -54,7 +54,7 @@ llms:
     api_key: ${VLLM_API_KEY:-no-key}
     temperature: 0.1
     top_p: 0.3
-    max_tokens: 16384
+    max_tokens: ${VLLM_RESEARCHER_MAX_TOKENS:-16384}
 
   # Deep research orchestrator and planner — large context model
   orchestrator_llm:
