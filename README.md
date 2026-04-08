@@ -70,11 +70,13 @@ The NVIDIA AI-Q Blueprint is an enterprise-grade research agent built on the [NV
 
 ## Fork Customizations
 
-This fork extends the upstream AI-Q Blueprint with:
+This fork extends the upstream [NVIDIA AI-Q Blueprint](https://github.com/NVIDIA-AI-Blueprints/aiq) as part of the [Red Hat AI Quickstarts](https://www.redhat.com/en/blog/introducing-ai-quickstarts) initiative, adding:
 
 - **Red Hat rebrand** — Logo, colors, fonts, and app name replaced throughout the Next.js frontend. See the [Rebranding Guide](docs/source/customization/rebranding.md).
 - **vLLM / open model support** — New `configs/config_web_vllm.yml` config that uses `_type: openai` to connect to any OpenAI-compatible endpoint (vLLM, TGI, etc.) instead of NVIDIA NIM. Model-aware thinking prefixes preserve Nemotron performance while giving clean prompts to other models. See the [vLLM Migration Guide](docs/source/customization/vllm-migration.md).
 - **Config validation improvements** — API key checks skip local/private endpoints automatically, so `NVIDIA_API_KEY` is not required when running against local vLLM.
+
+> **See also:** [Introducing Red Hat AI Quickstarts](https://www.redhat.com/en/blog/introducing-ai-quickstarts) for the broader context on how Red Hat is making AI blueprints accessible, and the upstream [NVIDIA AI-Q Blueprint repository](https://github.com/NVIDIA-AI-Blueprints/aiq) for the original project.
 
 **Quick start with vLLM:**
 
