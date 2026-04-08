@@ -140,6 +140,12 @@ Not all models work with all parsers. The correct combination matters:
 | **Mistral-Small-24B** | **`mistral`** | **No — cleanest tool calling of all tested models** |
 | Kimi K2.5 | `kimi_k2` (server-side) | Built-in |
 
+### Mixed-Model on Single GPU (Not Recommended)
+
+Tested Granite 3.3-8B (intent, :8081) + Nemotron-3-Nano (research, :8080) on the same GB10. Both models loaded but compute contention made the pipeline impractically slow — each model blocks the other during inference. Total memory fit (~75GB) but the sequential GPU access negated any benefit from using a smaller intent model.
+
+**Verdict:** Mixed-model requires multi-GPU or MaaS endpoints. On single GPU, use one model for all roles.
+
 ### Dense vs MoE on DGX Spark
 
 Dense models (all parameters active) are significantly slower than MoE models (few parameters active) on the GB10:
