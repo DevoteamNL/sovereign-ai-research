@@ -13,21 +13,21 @@ Comparative results from testing open models with the AI-Q Blueprint. All local 
 
 ## Summary Table
 
-| | Nemotron-3-Nano | Gemma 4 26B-A4B | Qwen3.5-35B-A3B | Kimi K2.5 (MaaS) |
-|---|---|---|---|---|
-| **Hosting** | Local (DGX Spark) | Local (DGX Spark) | Local (DGX Spark) | Remote (Red Hat MaaS) |
-| **Params** | 30B / 3B active | 26B / 4B active | 35B / 3B active | ~1T / ~32B active |
-| **vLLM image** | NGC 0.13.0 | Upstream 0.19.0 | Upstream 0.19.0 | Server-side |
-| **Context** | 131k | 8k | 32k (`--enforce-eager`) | 262k |
-| **Gen throughput** | ~29 tok/s | ~7 tok/s | ~28-30 tok/s | ~101 tok/s |
-| **Tool calling** | Works (`qwen3_coder`) | Broken (no parser) | Works (`qwen3_coder` + `deepseek_r1`) | Works (native `kimi_k2`) |
-| **Tool call latency** | ~2-3s | N/A | ~14s warm, ~51s cold | ~0.95s |
-| **Shallow research** | Works | Fails | Works | Works |
-| **Deep research** | Works | Fails (8k too small) | Short reports (32k) | Works (262k) |
-| **Thinking tokens** | Leak without reasoning parser | None | Separated via `deepseek_r1` | Separated natively |
-| **GPU memory** | ~85 GB | ~68 GB | ~90 GB | N/A (remote) |
-| **KV cache** | 23 GiB / 800k tokens | 60 GiB / 263k tokens | 39 GiB / 514k tokens | N/A |
-| **License** | NVIDIA custom | Apache-2.0 | Apache-2.0 | MIT |
+| | Nemotron-3-Nano | Gemma 4 26B-A4B | Qwen3.5-35B-A3B | Mistral-Small-24B | Kimi K2.5 (MaaS) |
+|---|---|---|---|---|---|
+| **Hosting** | Local (DGX Spark) | Local (DGX Spark) | Local (DGX Spark) | Local (DGX Spark) | Remote (Red Hat MaaS) |
+| **Params** | 30B / 3B active | 26B / 4B active | 35B / 3B active | 24B / 24B active (dense) | ~1T / ~32B active |
+| **vLLM image** | NGC 0.13.0 | Upstream 0.19.0 | Upstream 0.19.0 | NGC 0.13.0 | Server-side |
+| **Context** | 131k | 8k | 32k (`--enforce-eager`) | 32k | 262k |
+| **Gen throughput** | ~29 tok/s | ~7 tok/s | ~28-30 tok/s | **~5 tok/s** | ~101 tok/s |
+| **Tool calling** | Works (`qwen3_coder`) | Broken (no parser) | Works (`qwen3_coder` + `deepseek_r1`) | Works (`mistral`) | Works (native `kimi_k2`) |
+| **Tool call latency** | ~2-3s | N/A | ~14s warm, ~51s cold | ~4.5s | ~0.95s |
+| **Shallow research** | Works | Fails | Works | Works (slow) | Works |
+| **Deep research** | Works | Fails (8k too small) | Short reports (32k) | Limited (slow gen) | Works (262k) |
+| **Thinking tokens** | Leak without reasoning parser | None | Separated via `deepseek_r1` | None | Separated natively |
+| **GPU memory** | ~85 GB | ~68 GB | ~90 GB | ~79 GB | N/A (remote) |
+| **KV cache** | 23 GiB / 800k tokens | 60 GiB / 263k tokens | 39 GiB / 514k tokens | 49 GiB / 322k tokens | N/A |
+| **License** | NVIDIA custom | Apache-2.0 | Apache-2.0 | Apache-2.0 | MIT |
 
 ---
 
@@ -137,7 +137,21 @@ Not all models work with all parsers. The correct combination matters:
 | Nemotron-3-Nano | `qwen3_coder` | No (but `/no_think` leaks) |
 | Gemma 4 | None available | N/A |
 | Qwen3.5 | `qwen3_coder` | Yes (`deepseek_r1`) |
+| **Mistral-Small-24B** | **`mistral`** | **No — cleanest tool calling of all tested models** |
 | Kimi K2.5 | `kimi_k2` (server-side) | Built-in |
+
+### Dense vs MoE on DGX Spark
+
+Dense models (all parameters active) are significantly slower than MoE models (few parameters active) on the GB10:
+
+| Architecture | Model | Active params | Throughput |
+|-------------|-------|---------------|------------|
+| MoE | Nemotron-3-Nano | 3B | ~29 tok/s |
+| MoE | Qwen3.5-35B-A3B | 3B | ~28-30 tok/s |
+| Dense | Mistral-Small-24B | 24B | ~5 tok/s |
+| Dense | Gemma 4 26B-A4B | 4B (MoE) | ~7 tok/s |
+
+**Takeaway:** On DGX Spark, prefer MoE models with small active parameter counts (3-4B). Dense models above ~8B are impractically slow for interactive research.
 
 ### 3. Reasoning Token Overhead
 

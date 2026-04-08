@@ -241,6 +241,77 @@ VLLM_ORCHESTRATOR_MAX_TOKENS=16000
 
 ---
 
+## Mistral-Small-24B-Instruct (BF16)
+
+| | |
+|---|---|
+| **Model** | `mistralai/Mistral-Small-24B-Instruct-2501` |
+| **Architecture** | Dense (24B, all active) |
+| **Context window** | 32,768 tokens |
+| **License** | Apache 2.0 |
+| **HuggingFace** | [mistralai/Mistral-Small-24B-Instruct-2501](https://huggingface.co/mistralai/Mistral-Small-24B-Instruct-2501) |
+
+### GPU: NVIDIA DGX Spark (GB10, 128GB unified)
+
+**Docker command:**
+
+```bash
+docker run --privileged --gpus all -d --rm \
+  --name vllm-mistral \
+  --network host --ipc=host \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  nvcr.io/nvidia/vllm:26.01-py3 \
+  vllm serve mistralai/Mistral-Small-24B-Instruct-2501 \
+  --served-model-name mistral-small-24b \
+  --max-num-seqs 8 \
+  --tensor-parallel-size 1 \
+  --max-model-len 32768 \
+  --port 8080 \
+  --trust-remote-code \
+  --enable-auto-tool-choice \
+  --tool-call-parser mistral \
+  --gpu-memory-utilization 0.80
+```
+
+**deploy/.env:**
+
+```bash
+VLLM_BASE_URL=http://localhost:8080
+VLLM_API_KEY=no-key
+VLLM_INTENT_MODEL=mistral-small-24b
+VLLM_RESEARCHER_MODEL=mistral-small-24b
+VLLM_ORCHESTRATOR_MODEL=mistral-small-24b
+VLLM_SUMMARY_MODEL=mistral-small-24b
+VLLM_RESEARCHER_MAX_TOKENS=8192
+VLLM_ORCHESTRATOR_MAX_TOKENS=16000
+```
+
+**Performance:**
+
+| Metric | Value |
+|--------|-------|
+| vLLM image | `nvcr.io/nvidia/vllm:26.01-py3` (v0.13.0) |
+| Weight size | ~44 GB (BF16) |
+| GPU memory (weights + KV) | ~79 GB of 128 GB |
+| KV cache | 49.20 GiB / 322,400 tokens |
+| Generation throughput | **~5 tok/s** |
+| Tool call latency | ~4.5s |
+| Attention backend | FLASH_ATTN |
+| Model load time | ~14 min download + ~4 min shard loading |
+| Shallow research | Works |
+| Deep research | Limited (slow generation) |
+| Tool calling | Works (`mistral` parser — most mature in vLLM) |
+
+**Notes:**
+- **Tool calling is excellent.** The `mistral` parser is the most mature and reliable in vLLM. Clean structured `tool_calls` on first attempt, no reasoning parser needed.
+- **Generation is slow (~5 tok/s).** This is a 24B dense model — all parameters are active on every token, unlike MoE models where only 3-4B are active. The DGX Spark's GB10 compute is not sufficient for fast dense inference at this size.
+- Works on the NGC image (v0.13.0) without transformers upgrades — no compatibility issues.
+- 32k context works out of the box with FLASH_ATTN and CUDA graphs — no `--enforce-eager` needed.
+- Best suited as an **intent classifier or tool-calling router** where latency matters more than throughput (4.5s tool calls are fast). Not recommended as the primary researcher model due to slow generation.
+- Apache 2.0 license.
+
+---
+
 ## Kimi K2.5 — MaaS (Red Hat OpenShift)
 
 | | |
