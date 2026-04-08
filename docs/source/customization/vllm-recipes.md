@@ -150,17 +150,17 @@ VLLM_ORCHESTRATOR_MAX_TOKENS=4096
 | Generation throughput | ~7 tok/s |
 | Attention backend | TRITON_ATTN |
 | Model load time | ~5 min (shard loading) + ~1 min (CUDA graph compile) |
-| Shallow research | Works |
+| Shallow research | **Fails** (tool calling incompatible — see notes) |
 | Deep research | Limited (8k context constrains report length) |
 | Thinking prefixes | Not applicable (not a Nemotron model) |
-| Tool calling | Works (`--tool-call-parser pythonic`) |
+| Tool calling | **Not working** — `gemma4` parser not available in vLLM 0.19.0 |
 
 **Notes:**
 - Gemma 4 is very new — the NGC vLLM image (v0.13.0) does not support the `gemma4` architecture. Use the upstream `vllm/vllm-openai:latest` image with `pip install --upgrade transformers` at container startup.
+- **Tool calling does not work.** Gemma 4 uses a custom format (`call:func{args}`) that requires the `gemma4` tool call parser, which is not yet available in vLLM 0.19.0. The `pythonic` and `hermes` parsers do not recognize this format. Without tool calling, the shallow researcher cannot invoke web search, and citation verification rejects all responses. This will be resolved when vLLM ships with native `gemma4` parser support.
 - The upstream vLLM image uses significantly more GPU memory for CUDA graphs and profiling than the NGC image. Context window is limited to 8192 to leave room for KV cache. At 32k context, `num_gpu_blocks=0` (no KV cache).
 - No MoE config file exists for the GB10 yet (`E=128,N=704,device_name=NVIDIA_GB10.json`). Performance may improve when one is available.
 - Gemma 4 produces clean responses with no thinking token leakage.
-- The `gemma4` tool call parser is not available in vLLM 0.19.0 — use `pythonic` instead.
 - Apache 2.0 license — no HuggingFace token or license agreement required.
 
 ---
@@ -235,8 +235,8 @@ VLLM_ORCHESTRATOR_MAX_TOKENS=<value>
 | Use case | Recommended model | Why |
 |----------|------------------|-----|
 | **Full deep research** | Nemotron-3-Nano-30B-A3B | 131k context, native thinking, tool calling |
-| **Shallow research / chat** | Gemma 4 26B-A4B | Clean output, Apache 2.0, fast intent classification |
-| **Mixed (split roles)** | Nemotron orchestrator + Gemma researcher | Best of both: large context for planning, clean output for research |
+| **Shallow research** | Nemotron-3-Nano-30B-A3B | Tool calling works reliably with `qwen3_coder` parser |
+| **Chat / Q&A (no tools)** | Gemma 4 26B-A4B | Clean output, Apache 2.0 — but tool calling not yet supported in vLLM |
 | **Memory-constrained** | Gemma 4 E4B (4B) | Fits easily, good for intent classification and summaries |
 
 ## Key constraints by context window
