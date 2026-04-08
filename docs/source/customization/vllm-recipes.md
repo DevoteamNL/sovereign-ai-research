@@ -165,6 +165,56 @@ VLLM_ORCHESTRATOR_MAX_TOKENS=4096
 
 ---
 
+## Kimi K2.5 — MaaS (Red Hat OpenShift)
+
+| | |
+|---|---|
+| **Model** | Kimi K2.5 (Moonshot AI) |
+| **Architecture** | MoE (~1T total, ~32B active) |
+| **Context window** | 262,144 tokens |
+| **License** | MIT |
+| **Serving** | Red Hat MaaS on OpenShift (remote endpoint, not local) |
+
+### Endpoint: Red Hat MaaS
+
+This is a **remote MaaS endpoint**, not a local Docker container. No GPU required on the client.
+
+**deploy/.env:**
+
+```bash
+VLLM_BASE_URL=http://maas.apps.ocp.cloud.rhai-tmm.dev/kimi-k25/kimi-k2-5
+VLLM_API_KEY=<your-bearer-token>
+VLLM_INTENT_MODEL=kimi-k2-5
+VLLM_RESEARCHER_MODEL=kimi-k2-5
+VLLM_ORCHESTRATOR_MODEL=kimi-k2-5
+VLLM_SUMMARY_MODEL=kimi-k2-5
+VLLM_RESEARCHER_MAX_TOKENS=8192
+VLLM_ORCHESTRATOR_MAX_TOKENS=98000
+```
+
+**Performance:**
+
+| Metric | Value |
+|--------|-------|
+| Endpoint | Red Hat MaaS (OpenShift, vLLM backend) |
+| Generation throughput | ~101 tok/s |
+| Tool call latency | ~0.95s |
+| Simple chat latency | ~3.75s (incl. reasoning tokens) |
+| Long generation (1190 tokens) | ~11.7s |
+| Context window | 262,144 tokens |
+| Shallow research | Works |
+| Deep research | Works (262k context supports full reports) |
+| Tool calling | Works (kimi_k2 parser, server-side) |
+
+**Notes:**
+- No local GPU needed — inference runs on the MaaS cluster.
+- Kimi K2.5 generates reasoning tokens before content. A request for 100 content tokens may produce 200-300 total tokens. Account for this in `max_tokens` settings.
+- Auth uses Kubernetes ServiceAccount JWT tokens with expiry. Rotate before `exp` claim.
+- 262k context is the largest we've tested — deep research works without token budget constraints.
+- For detailed K8s admin info, see [MaaS Kimi K2.5 Guide](./maas-kimi-k25.md).
+
+---
+
 ## Template: Add your own recipe
 
 Copy this section, fill in the details, and submit a PR.
@@ -234,8 +284,9 @@ VLLM_ORCHESTRATOR_MAX_TOKENS=<value>
 
 | Use case | Recommended model | Why |
 |----------|------------------|-----|
-| **Full deep research** | Nemotron-3-Nano-30B-A3B | 131k context, native thinking, tool calling |
-| **Shallow research** | Nemotron-3-Nano-30B-A3B | Tool calling works reliably with `qwen3_coder` parser |
+| **Full deep research (MaaS)** | Kimi K2.5 via MaaS | 262k context, ~101 tok/s, native tool calling, no local GPU needed |
+| **Full deep research (local)** | Nemotron-3-Nano-30B-A3B | 131k context, native thinking, tool calling |
+| **Shallow research (local)** | Nemotron-3-Nano-30B-A3B | Tool calling works reliably with `qwen3_coder` parser |
 | **Chat / Q&A (no tools)** | Gemma 4 26B-A4B | Clean output, Apache 2.0 — but tool calling not yet supported in vLLM |
 | **Memory-constrained** | Gemma 4 E4B (4B) | Fits easily, good for intent classification and summaries |
 
