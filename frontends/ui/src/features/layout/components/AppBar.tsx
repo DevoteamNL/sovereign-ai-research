@@ -84,7 +84,7 @@ export const AppBar: FC<AppBarProps> = ({
   }, [rightPanel, openRightPanel, closeRightPanel, isAuthenticated])
 
   const handleDocsClick = useCallback(() => {
-    window.open('https://www.redhat.com/en/documentation', '_blank')
+    window.open('https://www.redhat.com/en/blog/introducing-ai-quickstarts', '_blank')
   }, [])
 
   const handleNewSessionClick = useCallback(() => {

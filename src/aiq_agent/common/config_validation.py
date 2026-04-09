@@ -339,7 +339,23 @@ async def validate_llm_endpoints(config: dict[str, Any]) -> list[str]:
         available_models = probe["models"]
 
         for llm_name, llm_config in llm_entries:
-            model_name = _resolve_config_value(llm_config.get("model_name", ""))
+            raw_model_name = llm_config.get("model_name", "")
+            model_name = _resolve_config_value(raw_model_name)
+
+            # If env var resolution returned empty, try the default value directly
+            if not model_name and raw_model_name:
+                env_var, default = _extract_env_var(raw_model_name)
+                if env_var and not model_name:
+                    # Env var not set in this process — use default if available
+                    model_name = default or ""
+                    if not model_name:
+                        logger.info(
+                            "Endpoint validation: skipping model check for '%s' — "
+                            "model name uses env var $%s which is not set in this process.",
+                            llm_name,
+                            env_var,
+                        )
+                        continue
 
             # 2. Model availability
             if available_models and model_name not in available_models:
