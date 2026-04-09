@@ -146,6 +146,8 @@ functions:
     planner_llm: nemotron_nano_llm  # replace with nemotron_super_llm if available
     tools:
       - web_search_tool
+      - paper_search_tool
+      - news_search_tool
       - knowledge_search
     max_turns: 3
     enable_plan_approval: true
@@ -158,6 +160,8 @@ functions:
     verbose: true
     tools:
       - web_search_tool
+      - paper_search_tool
+      - news_search_tool
       - knowledge_search
     max_llm_turns: 10
     max_tool_iterations: 5

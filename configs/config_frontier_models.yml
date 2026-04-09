@@ -144,6 +144,8 @@ functions:
     planner_llm: openai_gpt_5_2
     tools:
       - web_search_tool
+      - paper_search_tool
+      - news_search_tool
       - knowledge_search
     max_turns: 3
     enable_plan_approval: true
@@ -156,6 +158,8 @@ functions:
     verbose: true
     tools:
       - web_search_tool
+      - paper_search_tool
+      - news_search_tool
       - knowledge_search
     max_llm_turns: 10
     max_tool_iterations: 5
