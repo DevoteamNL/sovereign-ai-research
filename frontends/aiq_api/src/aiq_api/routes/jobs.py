@@ -211,6 +211,26 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
 
         tool_names = _collect_tool_names(builder)
 
+        paper_configured = any("paper" in name.lower() or "scholar" in name.lower() for name in tool_names)
+        if paper_configured:
+            data_sources.append(
+                DataSource(
+                    id="paper_search",
+                    name="Paper Search",
+                    description="Search academic papers and scholarly publications.",
+                )
+            )
+
+        news_configured = any("news" in name.lower() for name in tool_names)
+        if news_configured:
+            data_sources.append(
+                DataSource(
+                    id="news_search",
+                    name="News Search",
+                    description="Search current news articles and breaking stories.",
+                )
+            )
+
         knowledge_configured = any("knowledge" in name.lower() or name == "knowledge_search" for name in tool_names)
         if knowledge_configured:
             data_sources.append(
