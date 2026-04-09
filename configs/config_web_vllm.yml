@@ -86,6 +86,16 @@ functions:
     max_results: 2
     advanced_search: true
 
+  paper_search_tool:
+    _type: paper_search
+    max_results: 5
+    serper_api_key: ${SERPER_API_KEY}
+
+  news_search_tool:
+    _type: news_search
+    max_results: 5
+    serper_api_key: ${SERPER_API_KEY}
+
   # Knowledge Retrieval (see sources/knowledge_layer/KNOWLEDGE-LAYER-SETUP.md)
   knowledge_search:
     _type: knowledge_retrieval
@@ -103,6 +113,8 @@ functions:
     verbose: true
     tools:
       - web_search_tool
+      - paper_search_tool
+      - news_search_tool
       - knowledge_search
 
   clarifier_agent:
@@ -135,6 +147,8 @@ functions:
     max_loops: 2
     verbose: true
     tools:
+      - paper_search_tool
+      - news_search_tool
       - advanced_web_search_tool
       - knowledge_search
 

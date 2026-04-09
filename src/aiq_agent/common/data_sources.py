@@ -20,8 +20,8 @@ from typing import Any
 
 from langchain_core.messages import BaseMessage
 
-# Default to web_search when no data sources specified
-DEFAULT_DATA_SOURCES: list[str] = ["web_search"]
+# Default to all search sources when no data sources specified
+DEFAULT_DATA_SOURCES: list[str] = ["web_search", "paper_search", "news_search"]
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,8 @@ def filter_tools_by_sources(tools: list[Any], data_sources: list[str] | None) ->
     normalized = {source.lower() for source in data_sources}
     include_web_search = "web_search" in normalized
     include_knowledge = "knowledge_layer" in normalized
+    include_paper_search = "paper_search" in normalized
+    include_news_search = "news_search" in normalized
 
     filtered = []
     for tool in tools:
@@ -81,6 +83,12 @@ def filter_tools_by_sources(tools: list[Any], data_sources: list[str] | None) ->
                 filtered.append(tool)
         elif "knowledge" in name_lower or "document" in name_lower or "internal" in name_lower:
             if include_knowledge:
+                filtered.append(tool)
+        elif "paper" in name_lower or "scholar" in name_lower:
+            if include_paper_search:
+                filtered.append(tool)
+        elif "news" in name_lower:
+            if include_news_search:
                 filtered.append(tool)
         else:
             filtered.append(tool)
@@ -127,6 +135,14 @@ def format_data_source_tools(data_sources: list[str]) -> list[dict[str, str]]:
     for source in data_sources:
         if source == "web_search":
             tools_info.append({"name": "web_search", "description": "Search the web for real-time information."})
+        elif source == "paper_search":
+            tools_info.append(
+                {"name": "paper_search", "description": "Search academic papers and scholarly publications."}
+            )
+        elif source == "news_search":
+            tools_info.append(
+                {"name": "news_search", "description": "Search current news articles and breaking stories."}
+            )
         else:
             tools_info.append({"name": "knowledge_search", "description": "Search uploaded documents and files."})
 
