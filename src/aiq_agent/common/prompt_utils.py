@@ -101,9 +101,23 @@ def _get_model_name(llm: BaseChatModel) -> str:
     return ""
 
 
+def _is_nim_endpoint(llm: BaseChatModel) -> bool:
+    """Return True if *llm* is served by the NVIDIA NIM API (not vLLM/OpenAI-compatible)."""
+    try:
+        from langchain_nvidia_ai_endpoints import ChatNVIDIA
+
+        return isinstance(llm, ChatNVIDIA)
+    except ImportError:
+        return False
+
+
 def is_nemotron(llm: BaseChatModel) -> bool:
-    """Return True if *llm* is a Nemotron model that understands /think directives."""
-    return bool(_NEMOTRON_PATTERN.search(_get_model_name(llm)))
+    """Return True if *llm* is a Nemotron model on a NIM endpoint that understands /think directives.
+
+    vLLM serves the same models but does not interpret /think or /no_think
+    directives — they get echoed as literal text. Only NIM endpoints handle them.
+    """
+    return _is_nim_endpoint(llm) and bool(_NEMOTRON_PATTERN.search(_get_model_name(llm)))
 
 
 def get_thinking_prefix(llm: BaseChatModel, *, enable: bool = False) -> str:
