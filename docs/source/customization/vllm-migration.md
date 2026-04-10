@@ -184,20 +184,81 @@ NIM endpoints (`https://integrate.api.nvidia.com`) are skipped during probing si
 
 ### The Problem
 
-Nemotron models use `/no_think` and `/think` directives prepended to system prompts for performance optimization. These tokens are meaningless noise to Llama, Qwen, and other model families — they can confuse the model or appear in output.
+Nemotron models on NVIDIA NIM use `/no_think` and `/think` directives prepended to system prompts for performance optimization. These directives are a **NIM-layer feature** — they are processed by the NIM server before reaching the model.
 
-### The Solution
+When the same Nemotron model runs on **vLLM**, these directives are **not recognized**. vLLM passes them through as literal text, causing `/think` or `/no_think` to appear in the agent's output. This is because vLLM uses the model's built-in chat template directly, without NIM's server-side processing layer.
 
-The helper function `get_thinking_prefix(llm, enable)` in `src/aiq_agent/common/prompt_utils.py` inspects the LLM's model name at runtime:
+### How It Works
 
-| Model Family | `get_thinking_prefix(llm, enable=False)` | `get_thinking_prefix(llm, enable=True)` |
-|---|---|---|
-| Nemotron (`nvidia/llama-*-nemotron-*`) | `/no_think\n\n` | `/think\n\n` |
-| All other models | `""` (empty) | `""` (empty) |
+The helper function `get_thinking_prefix(llm, enable)` in `src/aiq_agent/common/prompt_utils.py` checks **both** the model name and the backend type before adding directives:
+
+| Scenario | Config `_type` | Model | `/think` added? | `chat_template_kwargs` | Behavior |
+|----------|:-:|-------|:-:|:-:|---|
+| NIM Cloud API | `nim` | Nemotron | Yes | `enable_thinking: true` | NIM handles directives; output is clean |
+| Self-hosted NIM | `nim` | Nemotron | Yes | `enable_thinking: true` | Same as cloud NIM |
+| Local vLLM | `openai` | Nemotron | **No** | **Do not set** | Model uses its built-in chat template |
+| Local vLLM | `openai` | Llama/Qwen/etc | No | Not applicable | No thinking directives needed |
+| MaaS gateway | `openai` | Any | No | Not applicable | Depends on upstream model |
 
 Agent code prepends the result to the rendered system prompt. This means:
-- Nemotron keeps its performance benefit on latency-sensitive paths
-- vLLM/OpenAI models get clean, uncontaminated prompts
+- Nemotron on NIM keeps its performance directives
+- Nemotron on vLLM gets clean prompts (no echoed tokens)
+- All other models always get clean prompts
+
+### Why vLLM Nemotron Is Different
+
+When NVIDIA NIM serves Nemotron, the server intercepts `/think` and `/no_think` in the prompt and translates them into internal model controls. The user never sees these tokens.
+
+When vLLM serves the same Nemotron model, there is no such server-side processing. The `/think` text is treated as part of the prompt content and may be echoed back in the model's response. This is why the code checks for `ChatNVIDIA` (NIM) vs `ChatOpenAI` (vLLM) before adding directives.
+
+### Common Mistake: Copying NIM Config to vLLM
+
+Do **not** copy `chat_template_kwargs` from a NIM config into a vLLM config:
+
+```yaml
+# WRONG - vLLM does not support chat_template_kwargs
+llms:
+  my_llm:
+    _type: openai                    # vLLM backend
+    model_name: nvidia/nemotron-3-nano-30b-a3b
+    base_url: http://localhost:8080/v1
+    chat_template_kwargs:            # This will be ignored or cause warnings
+      enable_thinking: true
+```
+
+```yaml
+# CORRECT - vLLM config for Nemotron (no chat_template_kwargs)
+llms:
+  my_llm:
+    _type: openai
+    model_name: nvidia/nemotron-3-nano-30b-a3b
+    base_url: http://localhost:8080/v1
+    temperature: 0.5
+    max_tokens: 4096
+```
+
+For NIM endpoints, `chat_template_kwargs` is correct and expected:
+
+```yaml
+# CORRECT - NIM config for Nemotron
+llms:
+  my_llm:
+    _type: nim
+    model_name: nvidia/nemotron-3-nano-30b-a3b
+    base_url: "https://integrate.api.nvidia.com/v1"
+    chat_template_kwargs:
+      enable_thinking: true
+```
+
+### How the Code Handles It
+
+In `src/aiq_agent/common/prompt_utils.py`:
+
+1. `_is_nim_endpoint(llm)` checks if the LLM is a `ChatNVIDIA` instance (NIM)
+2. `is_nemotron(llm)` returns `True` only if BOTH the model name matches Nemotron AND the backend is NIM
+3. `get_thinking_prefix(llm, enable)` returns `/think\n\n` or `/no_think\n\n` only for NIM Nemotron; empty string for everything else
+
+This is automatic — no user configuration is needed beyond setting the correct `_type` in the YAML config.
 
 ### Extending for Future Models
 
@@ -315,9 +376,17 @@ VLLM_ORCHESTRATOR_MAX_TOKENS=16384
 - Set `VLLM_ORCHESTRATOR_MAX_TOKENS` to a value within the model's context window
 - Verify with: `curl -H "Authorization: Bearer $VLLM_API_KEY" $VLLM_BASE_URL/v1/models`
 
-**Thinking tokens appearing in output**
-- For non-Nemotron models, the thinking prefix is already empty; the tokens are coming from the model itself
-- For vLLM-served reasoning models, use `--reasoning-parser` flag if available
+**`/think` or `/no_think` appears as literal text in output**
+- This means Nemotron is running on vLLM but the code is adding NIM-specific directives
+- Update to the latest codebase — `get_thinking_prefix()` now checks the backend type and only adds directives for NIM endpoints (`_type: nim`)
+- Verify your config uses `_type: openai` (not `_type: nim`) for vLLM endpoints
+- Do NOT add `chat_template_kwargs` to vLLM configs
+
+**`<think>...</think>` blocks appear in output**
+- The model is producing reasoning tokens (separate from `/think` directives)
+- This happens with reasoning-capable models (Nemotron with thinking enabled, DeepSeek-R1, Qwen QwQ)
+- For vLLM: use `--reasoning-parser deepseek_r1` flag when starting vLLM to separate reasoning from output
+- For NIM: ensure `enable_thinking` is set appropriately in `chat_template_kwargs`
 
 **Timeout or connection errors**
 - Check vLLM is running and accessible: `curl http://localhost:8000/v1/models`
