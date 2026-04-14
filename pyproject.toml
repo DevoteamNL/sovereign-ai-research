@@ -51,6 +51,7 @@ dependencies = [
     "pypdf>=6.9.2",             # Multiple DoS CVEs (infinite loops, memory exhaustion)
     # "requests>=2.33.0" — blocked by ragaai-catalyst pinning requests<2.33
     "pygments>=2.20.0,<3",      # CVE: ReDoS in GUID matching (upper bound from upstream #175)
+    "pillow>=12.2.0,<13",       # CVE-2026-40192 (upstream #183)
     "nltk>=3.9.4",              # CVE: XSS in NLTK
 ]
 
@@ -202,6 +203,7 @@ prerelease = "if-necessary-or-explicit"
 override-dependencies = [
     "authlib>=1.6.9,<2",
     "cryptography>=46.0.6,<47",
+    "pillow>=12.2.0,<13",
     "pygments>=2.20.0,<3",
     "pyopenssl>=26.0.0,<27",
     "tornado>=6.5.5",
