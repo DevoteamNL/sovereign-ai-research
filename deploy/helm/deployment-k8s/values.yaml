@@ -148,6 +148,7 @@ aiq:
         POSTGRES_PASSWORD: DB_USER_PASSWORD
       env:
         POSTGRES_DB: aiq_jobs
+        POSTGRESQL_MAX_CONNECTIONS: '200'
       configMaps:
       - name: aiq-postgres-init
         data:
