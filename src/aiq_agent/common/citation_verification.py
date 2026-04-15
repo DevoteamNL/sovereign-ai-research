@@ -81,6 +81,10 @@ class EmptySourceRegistryError(Exception):
         tool_errors: List of error messages from failed tool calls, if any. When
             populated, indicates tools were invoked but returned errors (e.g., API
             quota exhausted) rather than the model ignoring tools entirely.
+        unavailable_tools: List of tool names registered as stubs because their
+            pre-flight checks failed (e.g., missing API keys). Surfaced upstream by
+            #184 for actionable configuration guidance.
+        available_count: Number of tools that passed pre-flight and could have run.
     """
 
     def __init__(
@@ -89,10 +93,14 @@ class EmptySourceRegistryError(Exception):
         *,
         had_model_response: bool = False,
         tool_errors: list[str] | None = None,
+        unavailable_tools: list[str] | None = None,
+        available_count: int = 0,
     ) -> None:
         self.agent_type = agent_type
         self.had_model_response = had_model_response
         self.tool_errors = tool_errors or []
+        self.unavailable_tools = unavailable_tools or []
+        self.available_count = available_count
         if self.tool_errors:
             detail = f"Research tools failed during {agent_type}: " + "; ".join(self.tool_errors)
         elif had_model_response:

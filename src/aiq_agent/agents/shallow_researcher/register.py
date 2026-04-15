@@ -57,6 +57,18 @@ async def shallow_research_agent(config: ShallowResearchAgentConfig, builder: Bu
     llm = await builder.get_llm(config.llm, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
     tools = await builder.get_tools(tool_names=config.tools, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
 
+    from aiq_agent.common import validate_tool_availability
+
+    is_valid, available_count, unavailable = validate_tool_availability(
+        tools,
+        research_type="shallow research",
+    )
+    if not is_valid:
+        logger.warning(
+            "Startup check: no tools available for shallow research. "
+            "All queries will fail until at least one tool is properly configured.",
+        )
+
     provider = LLMProvider()
     provider.set_default(llm)
 
@@ -91,7 +103,7 @@ async def shallow_research_agent(config: ShallowResearchAgentConfig, builder: Bu
             # At least one tool must be available
             # This prevents the agent from trying to reason about unavailable tools
             # Check selected_tools directly - they already reflect data_sources filtering
-            from aiq_agent.common import format_tool_unavailability_error
+            from aiq_agent.common import format_user_facing_tool_error
             from aiq_agent.common import validate_tool_availability
 
             is_valid, _, unavailable_tools = validate_tool_availability(
@@ -100,7 +112,7 @@ async def shallow_research_agent(config: ShallowResearchAgentConfig, builder: Bu
 
             # Fail if no tools are available
             if not is_valid:
-                error_msg = format_tool_unavailability_error("shallow research", unavailable_tools)
+                error_msg = format_user_facing_tool_error("shallow research", unavailable_tools)
 
                 # Return error state with error message - this prevents the agent from running
                 from langchain_core.messages import AIMessage

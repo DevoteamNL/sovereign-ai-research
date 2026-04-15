@@ -199,9 +199,11 @@ class ChatResearcherAgent:
                 result = await self.shallow_research_fn(shallow_state)
             except EmptySourceRegistryError as source_err:
                 logger.warning(
-                    "Shallow research produced no verifiable sources (had_model_response=%s, tool_errors=%d)",
+                    "Shallow research produced no verifiable sources "
+                    "(had_model_response=%s, tool_errors=%d, unavailable_tools=%d)",
                     source_err.had_model_response,
                     len(source_err.tool_errors),
+                    len(source_err.unavailable_tools),
                 )
                 if source_err.tool_errors:
                     # Tools were called but returned errors (API quota, network, etc.)
@@ -210,6 +212,14 @@ class ChatResearcherAgent:
                         "Details: " + "; ".join(source_err.tool_errors[:3]) + ". "
                         "This may be due to an API quota limit, a temporary service outage, "
                         "or a misconfigured API key. Please check your API keys and try again later."
+                    )
+                elif source_err.unavailable_tools:
+                    from aiq_agent.common.tool_validation import format_user_facing_tool_error
+
+                    err_msg = format_user_facing_tool_error(
+                        "shallow research",
+                        source_err.unavailable_tools,
+                        source_err.available_count,
                     )
                 elif source_err.had_model_response:
                     err_msg = (
@@ -289,9 +299,11 @@ class ChatResearcherAgent:
                 result = await self.deep_research_fn(deep_state)
             except EmptySourceRegistryError as source_err:
                 logger.warning(
-                    "Deep research produced no verifiable sources (had_model_response=%s, tool_errors=%d)",
+                    "Deep research produced no verifiable sources "
+                    "(had_model_response=%s, tool_errors=%d, unavailable_tools=%d)",
                     source_err.had_model_response,
                     len(source_err.tool_errors),
+                    len(source_err.unavailable_tools),
                 )
                 if source_err.tool_errors:
                     err_msg = (
@@ -299,6 +311,14 @@ class ChatResearcherAgent:
                         "Details: " + "; ".join(source_err.tool_errors[:3]) + ". "
                         "This may be due to an API quota limit, a temporary service outage, "
                         "or a misconfigured API key. Please check your API keys and try again later."
+                    )
+                elif source_err.unavailable_tools:
+                    from aiq_agent.common.tool_validation import format_user_facing_tool_error
+
+                    err_msg = format_user_facing_tool_error(
+                        "deep research",
+                        source_err.unavailable_tools,
+                        source_err.available_count,
                     )
                 elif source_err.had_model_response:
                     err_msg = (
