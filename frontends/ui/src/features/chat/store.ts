@@ -52,7 +52,7 @@ import {
 import { pruneMessageForStorage } from './lib/prune-message-for-storage'
 import { ensureStorageCapacity, checkStorageHealth } from './lib/storage-manager'
 import { useLayoutStore } from '@/features/layout/store'
-import { WEB_SEARCH_SOURCE_ID } from '@/features/layout/data-sources'
+import { API_KEY_SOURCE_IDS } from '@/features/layout/data-sources'
 
 const isQuotaExceededError = (error: unknown): boolean => {
   if (!(error instanceof Error)) return false
@@ -239,7 +239,7 @@ const getDefaultEnabledDataSourceIds = (): string[] => {
   const layoutStore = useLayoutStore.getState()
   return (
     layoutStore.availableDataSources
-      ?.filter((source) => source.id === WEB_SEARCH_SOURCE_ID)
+      ?.filter((source) => API_KEY_SOURCE_IDS.has(source.id))
       .map((source) => source.id) ?? []
   )
 }

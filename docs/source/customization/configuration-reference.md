@@ -108,7 +108,7 @@ llms:
 | `top_p` | `float` | `None` | Nucleus sampling threshold. When `None`, the API uses its server-side default. |
 | `max_tokens` | `int` | `300` | Maximum tokens in the response. Set higher values (for example, `16384` or `128000`) for research agents. |
 | `num_retries` | `int` | `5` | Number of retry attempts on API failure. |
-| `chat_template_kwargs` | `object` | -- | Extra arguments passed to the chat template. Use `enable_thinking: true` to activate the model's chain-of-thought reasoning. |
+| `chat_template_kwargs` | `object` | -- | **NIM only (`_type: nim`).** Extra arguments passed to the NIM chat template. Use `enable_thinking: true` to activate chain-of-thought reasoning. Do not use with `_type: openai` (vLLM) — vLLM does not support this parameter and the directives will appear as literal text. See [vLLM Migration: Thinking Prefixes](./vllm-migration.md#model-aware-thinking-prefixes). |
 
 ### Common LLM Configurations
 

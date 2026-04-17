@@ -210,9 +210,19 @@ Description: {{ step.description }}
 # -------------------------------------------------------------------------
 
 
-def _make_mock_llm(model_name: str):
-    """Create a mock LLM with the given model_name attribute."""
-    llm = MagicMock()
+def _make_mock_llm(model_name: str, *, nim: bool = False):
+    """Create a mock LLM with the given model_name attribute.
+
+    Args:
+        model_name: Model name string.
+        nim: If True, mock as a ChatNVIDIA instance (NIM endpoint).
+    """
+    if nim:
+        from langchain_nvidia_ai_endpoints import ChatNVIDIA
+
+        llm = MagicMock(spec=ChatNVIDIA)
+    else:
+        llm = MagicMock()
     llm.model_name = model_name
     return llm
 
@@ -249,8 +259,19 @@ class TestIsNemotron:
             "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
         ],
     )
-    def test_nemotron_models_detected(self, model_name):
-        assert is_nemotron(_make_mock_llm(model_name)) is True
+    def test_nemotron_on_nim_detected(self, model_name):
+        assert is_nemotron(_make_mock_llm(model_name, nim=True)) is True
+
+    @pytest.mark.parametrize(
+        "model_name",
+        [
+            "nvidia/llama-3.3-nemotron-super-49b-v1",
+            "nvidia/nvidia-nemotron-3-nano-30b-a3b",
+        ],
+    )
+    def test_nemotron_on_vllm_not_detected(self, model_name):
+        """Nemotron on vLLM (non-NIM) should NOT get /think directives."""
+        assert is_nemotron(_make_mock_llm(model_name, nim=False)) is False
 
     @pytest.mark.parametrize(
         "model_name",
@@ -272,13 +293,19 @@ class TestIsNemotron:
 class TestGetThinkingPrefix:
     """Tests for get_thinking_prefix()."""
 
-    def test_nemotron_disable_thinking(self):
-        llm = _make_mock_llm("nvidia/llama-3.3-nemotron-super-49b-v1")
+    def test_nemotron_nim_disable_thinking(self):
+        llm = _make_mock_llm("nvidia/llama-3.3-nemotron-super-49b-v1", nim=True)
         assert get_thinking_prefix(llm, enable=False) == "/no_think\n\n"
 
-    def test_nemotron_enable_thinking(self):
-        llm = _make_mock_llm("nvidia/llama-3.3-nemotron-super-49b-v1")
+    def test_nemotron_nim_enable_thinking(self):
+        llm = _make_mock_llm("nvidia/llama-3.3-nemotron-super-49b-v1", nim=True)
         assert get_thinking_prefix(llm, enable=True) == "/think\n\n"
+
+    def test_nemotron_vllm_returns_empty(self):
+        """Nemotron on vLLM should NOT get /think directives."""
+        llm = _make_mock_llm("nvidia/llama-3.3-nemotron-super-49b-v1", nim=False)
+        assert get_thinking_prefix(llm, enable=False) == ""
+        assert get_thinking_prefix(llm, enable=True) == ""
 
     def test_non_nemotron_disable_returns_empty(self):
         llm = _make_mock_llm("meta-llama/Llama-3.1-70B-Instruct")
@@ -289,13 +316,13 @@ class TestGetThinkingPrefix:
         assert get_thinking_prefix(llm, enable=True) == ""
 
     def test_default_enable_is_false(self):
-        llm = _make_mock_llm("nvidia/llama-3.3-nemotron-super-49b-v1")
+        llm = _make_mock_llm("nvidia/llama-3.3-nemotron-super-49b-v1", nim=True)
         # enable defaults to False
         assert get_thinking_prefix(llm) == "/no_think\n\n"
 
     def test_prefix_can_be_prepended_to_prompt(self):
         """Integration-style test: prefix + rendered prompt produces correct output."""
-        nemotron = _make_mock_llm("nvidia/nvidia-nemotron-3-nano-30b-a3b")
+        nemotron = _make_mock_llm("nvidia/nvidia-nemotron-3-nano-30b-a3b", nim=True)
         vllm = _make_mock_llm("Qwen/Qwen2.5-72B-Instruct")
 
         prompt = "You are an assistant."

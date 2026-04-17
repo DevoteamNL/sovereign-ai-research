@@ -26,7 +26,8 @@ export interface DataSource {
 }
 
 /**
- * Default data source ID that works without authentication.
- * Web search uses backend API keys (Tavily), not user tokens.
+ * Data source IDs that work without user authentication.
+ * These sources use backend API keys (Tavily, Serper), not user tokens.
  */
 export const WEB_SEARCH_SOURCE_ID = 'web_search'
+export const API_KEY_SOURCE_IDS = new Set(['web_search', 'paper_search', 'news_search'])

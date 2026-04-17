@@ -16,7 +16,7 @@ import { Globe, LoadingSpinner } from '@/adapters/ui/icons'
 import { useAuth } from '@/adapters/auth'
 import { useLayoutStore } from '../store'
 import { useIsCurrentSessionBusy, useChatStore } from '@/features/chat'
-import { type DataSource, WEB_SEARCH_SOURCE_ID } from '../data-sources'
+import { type DataSource, API_KEY_SOURCE_IDS } from '../data-sources'
 import { DataConnectionCard } from './DataConnectionCard'
 import { FileSourcesTab } from './FileSourcesTab'
 import { UploadOrchestrator } from '@/features/documents'
@@ -79,9 +79,9 @@ export const DataSourcesPanel: FC<DataSourcesPanelProps> = ({ onSourceToggle, on
     }))
   }, [availableDataSources])
 
-  // Check if there are authenticated sources (sources other than web_search that require auth)
+  // Check if there are authenticated sources (sources that require user auth, not just backend API keys)
   const hasAuthenticatedSources = useMemo(() => {
-    return displaySources.some((source) => source.id !== WEB_SEARCH_SOURCE_ID)
+    return displaySources.some((source) => !API_KEY_SOURCE_IDS.has(source.id))
   }, [displaySources])
 
   const handleOpenChange = useCallback(
@@ -123,10 +123,10 @@ export const DataSourcesPanel: FC<DataSourcesPanelProps> = ({ onSourceToggle, on
     [setDataSourcesPanelTab]
   )
 
-  // Get only available sources (web_search always available, other sources need auth)
+  // Get only available sources (API-key sources always available, others need user auth)
   const availableSources = useMemo(() => {
     return displaySources.filter(
-      (source) => source.id === WEB_SEARCH_SOURCE_ID || hasValidToken
+      (source) => API_KEY_SOURCE_IDS.has(source.id) || hasValidToken
     )
   }, [displaySources, hasValidToken])
 
@@ -290,8 +290,8 @@ export const DataSourcesPanel: FC<DataSourcesPanelProps> = ({ onSourceToggle, on
           ) : (
             <Flex direction="col" gap="2">
               {displaySources.map((source) => {
-                // Authenticated sources require sign-in - web_search works without auth
-                const isAuthenticatedSource = source.id !== WEB_SEARCH_SOURCE_ID
+                // API-key sources work without user auth; others require sign-in
+                const isAuthenticatedSource = !API_KEY_SOURCE_IDS.has(source.id)
                 const isSourceAvailable = !isAuthenticatedSource || hasValidToken
                 return (
                   <DataConnectionCard

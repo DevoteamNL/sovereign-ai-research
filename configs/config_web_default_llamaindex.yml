@@ -120,12 +120,15 @@ functions:
     top_k: 5
     chroma_dir: ${AIQ_CHROMA_DIR:-/tmp/chroma_data}
 
-  # Paper Search (optional - requires SERPER_API_KEY)
-  # Uncomment the block below and set SERPER_API_KEY to enable academic paper search.
-  # paper_search_tool:
-  #   _type: paper_search
-  #   max_results: 5
-  #   serper_api_key: ${SERPER_API_KEY}
+  paper_search_tool:
+    _type: paper_search
+    max_results: 5
+    serper_api_key: ${SERPER_API_KEY}
+
+  news_search_tool:
+    _type: news_search
+    max_results: 5
+    serper_api_key: ${SERPER_API_KEY}
 
   intent_classifier:
     _type: intent_classifier
@@ -133,7 +136,8 @@ functions:
     verbose: true
     tools:
       - web_search_tool
-      # - paper_search_tool  # Uncomment if SERPER_API_KEY is set
+      - paper_search_tool
+      - news_search_tool
       - knowledge_search
 
   clarifier_agent:
@@ -142,6 +146,8 @@ functions:
     planner_llm: nemotron_nano_llm  # replace with nemotron_super_llm if available
     tools:
       - web_search_tool
+      - paper_search_tool
+      - news_search_tool
       - knowledge_search
     max_turns: 3
     enable_plan_approval: true
@@ -154,6 +160,8 @@ functions:
     verbose: true
     tools:
       - web_search_tool
+      - paper_search_tool
+      - news_search_tool
       - knowledge_search
     max_llm_turns: 10
     max_tool_iterations: 5
@@ -166,7 +174,8 @@ functions:
     max_loops: 2
     verbose: true
     tools:
-      # - paper_search_tool  # Uncomment if SERPER_API_KEY is set
+      - paper_search_tool
+      - news_search_tool
       - advanced_web_search_tool
       - knowledge_search
 
