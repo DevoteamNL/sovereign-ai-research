@@ -70,7 +70,7 @@ If you prefer to install components selectively, follow these steps.
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/rh-ai-quickstart/rh-research.git
+git clone -b red-hat-v2.1.0 https://github.com/rh-ai-quickstart/rh-research.git
 cd rh-research
 ```
 

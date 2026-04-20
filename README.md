@@ -19,7 +19,7 @@ limitations under the License.
 
 > **📦 Project home**
 >
-> Active development lives at [`rh-ai-quickstart/rh-research`](https://github.com/rh-ai-quickstart/rh-research). The upstream project is [`NVIDIA-AI-Blueprints/aiq`](https://github.com/NVIDIA-AI-Blueprints/aiq); see [`MIGRATION.md`](MIGRATION.md) for the relationship between the two and how to track either.
+> Active development lives at [`rh-ai-quickstart/rh-research`](https://github.com/rh-ai-quickstart/rh-research) on the **`red-hat-v2.1.0`** branch. The repo's `develop` branch currently tracks NVIDIA upstream ([`NVIDIA-AI-Blueprints/aiq`](https://github.com/NVIDIA-AI-Blueprints/aiq)) while a separate upstream-merge effort integrates recent NVIDIA changes. See [`MIGRATION.md`](MIGRATION.md) for the layout and how to track either branch.
 
 > **🏆 BENCHMARK NOTE 🏆**
 >
@@ -161,7 +161,7 @@ Each agent can be run individually or as part of the orchestrated workflow. For 
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/rh-ai-quickstart/rh-research.git && cd rh-research
+git clone -b red-hat-v2.1.0 https://github.com/rh-ai-quickstart/rh-research.git && cd rh-research
 ```
 
 ### Automated Setup
