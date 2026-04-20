@@ -3,7 +3,8 @@
 Migration (2026-04-20)
 
 - Project home moved to [`rh-ai-quickstart/rh-research`](https://github.com/rh-ai-quickstart/rh-research); see `MIGRATION.md` for history layout, upstream tracking, and attribution
-- Repo URL references (README, installation guide, Sphinx config, getting-started and deep-researcher notebooks) retargeted to the new canonical home; NVIDIA upstream attribution preserved in `Fork Customizations` and "See also" sections
+- Red Hat work lives on the `red-hat-v2.1.0` branch of `rh-research` (tagged `v2.1.0-redhat`); the repo's `develop` branch tracks NVIDIA upstream while the 23-commit upstream-merge effort is tracked separately
+- Repo URL references (README, installation guide, Sphinx config, getting-started and deep-researcher notebooks) retargeted to the new canonical home including the `red-hat-v2.1.0` branch hint on clone instructions; NVIDIA upstream attribution preserved in `Fork Customizations` and "See also" sections
 
 Release v2.1.0-redhat
 
