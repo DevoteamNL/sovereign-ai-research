@@ -17,9 +17,13 @@ limitations under the License.
 -->
 <h1>NVIDIA AI-Q Blueprint</h1>
 
+> **📦 Project home**
+>
+> Active development lives at [`rh-ai-quickstart/rh-research`](https://github.com/rh-ai-quickstart/rh-research). The upstream project is [`NVIDIA-AI-Blueprints/aiq`](https://github.com/NVIDIA-AI-Blueprints/aiq); see [`MIGRATION.md`](MIGRATION.md) for the relationship between the two and how to track either.
+
 > **🏆 BENCHMARK NOTE 🏆**
 >
-> To obtain results consistent with the **nvidia-aiq** [DeepResearch Bench](https://huggingface.co/spaces/muset-ai/DeepResearch-Bench-Leaderboard) and [DeepResearch Bench II](https://agentresearchlab.com/benchmarks/deepresearch-bench-ii/index.html#leaderboard) leaderboard results, please use the [`drb1`](https://github.com/NVIDIA-AI-Blueprints/aiq/tree/drb1) and [`drb2`](https://github.com/NVIDIA-AI-Blueprints/aiq/tree/drb2) branches, respectively.
+> To obtain results consistent with the **nvidia-aiq** [DeepResearch Bench](https://huggingface.co/spaces/muset-ai/DeepResearch-Bench-Leaderboard) and [DeepResearch Bench II](https://agentresearchlab.com/benchmarks/deepresearch-bench-ii/index.html#leaderboard) leaderboard results, please use the [`drb1`](https://github.com/NVIDIA-AI-Blueprints/aiq/tree/drb1) and [`drb2`](https://github.com/NVIDIA-AI-Blueprints/aiq/tree/drb2) branches from the upstream repository, respectively.
 
 
 ## Table of Contents
@@ -157,7 +161,7 @@ Each agent can be run individually or as part of the orchestrated workflow. For 
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/NVIDIA-AI-Blueprints/aiq.git && cd aiq
+git clone https://github.com/rh-ai-quickstart/rh-research.git && cd rh-research
 ```
 
 ### Automated Setup

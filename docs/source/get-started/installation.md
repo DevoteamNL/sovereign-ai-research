@@ -70,8 +70,8 @@ If you prefer to install components selectively, follow these steps.
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/NVIDIA-AI-Blueprints/aiq.git
-cd aiq
+git clone https://github.com/rh-ai-quickstart/rh-research.git
+cd rh-research
 ```
 
 ### 2. Create the Virtual Environment
