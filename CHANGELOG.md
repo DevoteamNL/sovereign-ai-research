@@ -1,5 +1,10 @@
 # Change Log
 
+Migration (2026-04-20)
+
+- Project home moved to [`rh-ai-quickstart/rh-research`](https://github.com/rh-ai-quickstart/rh-research); see `MIGRATION.md` for history layout, upstream tracking, and attribution
+- Repo URL references (README, installation guide, Sphinx config, getting-started and deep-researcher notebooks) retargeted to the new canonical home; NVIDIA upstream attribution preserved in `Fork Customizations` and "See also" sections
+
 Release v2.1.0-redhat
 
 - Red Hat frontend rebrand: logo (fedora SVG), colors (#76b900 to #EE0000 palette), fonts (Red Hat Display/Text via Google Fonts), app name (AI-Q to Red Hat Research), favicon
