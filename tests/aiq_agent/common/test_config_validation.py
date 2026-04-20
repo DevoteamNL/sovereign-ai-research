@@ -415,3 +415,28 @@ class TestValidateLlmEndpoints:
         """Empty config produces no warnings."""
         warnings = await validate_llm_endpoints({})
         assert warnings == []
+
+    @pytest.mark.asyncio
+    async def test_accepts_model_key_from_preprocessed_config(self):
+        """NAT preprocesses openai LLMs and renames `model_name` → `model`; both keys must validate."""
+        config = {
+            "llms": {
+                "intent_llm": {
+                    "_type": "openai",
+                    "model": "granite-3-2-8b-instruct",
+                    "base_url": "http://localhost:9999/v1",
+                    "api_key": "test-key",  # pragma: allowlist secret
+                },
+            },
+            "functions": {},
+        }
+        mock_probe = AsyncMock(
+            return_value={
+                "reachable": True,
+                "models": {"granite-3-2-8b-instruct": {}},
+                "error": None,
+            }
+        )
+        with patch("aiq_agent.common.config_validation._probe_endpoint", mock_probe):
+            warnings = await validate_llm_endpoints(config)
+        assert not any("not found" in w for w in warnings), warnings

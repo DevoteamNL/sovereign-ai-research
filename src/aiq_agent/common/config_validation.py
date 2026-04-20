@@ -339,7 +339,9 @@ async def validate_llm_endpoints(config: dict[str, Any]) -> list[str]:
         available_models = probe["models"]
 
         for llm_name, llm_config in llm_entries:
-            raw_model_name = llm_config.get("model_name", "")
+            # NAT's preprocessed config (/tmp/nat_config*.yml) renames `model_name` to `model`
+            # for openai-type LLMs, so accept either key.
+            raw_model_name = llm_config.get("model_name") or llm_config.get("model") or ""
             model_name = _resolve_config_value(raw_model_name)
 
             # If env var resolution returned empty, try the default value directly
