@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import inspect
 import logging
 import uuid
 from typing import Any
@@ -285,12 +286,16 @@ async def run_agent_job(
         async with WorkflowBuilder.from_config(config=config) as builder:
             fn_config = builder.get_function_config(agent_config_name)
 
-            # Get LLMs for deep_researcher (orchestrator required)
-            orchestrator_llm = await builder.get_llm(
-                fn_config.orchestrator_llm, wrapper_type=LLMFrameworkEnum.LANGCHAIN
-            )
+            # Resolve LLMs. Agent configs differ in shape:
+            #   deep_research_agent has orchestrator_llm / planner_llm / researcher_llm
+            #   shallow_research_agent has a single `llm` field
+            orchestrator_llm = None
             planner_llm = None
             researcher_llm = None
+            if hasattr(fn_config, "orchestrator_llm") and fn_config.orchestrator_llm:
+                orchestrator_llm = await builder.get_llm(
+                    fn_config.orchestrator_llm, wrapper_type=LLMFrameworkEnum.LANGCHAIN
+                )
             if hasattr(fn_config, "planner_llm") and fn_config.planner_llm:
                 planner_llm = await builder.get_llm(fn_config.planner_llm, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
             if hasattr(fn_config, "researcher_llm") and fn_config.researcher_llm:
@@ -298,7 +303,13 @@ async def run_agent_job(
                     fn_config.researcher_llm, wrapper_type=LLMFrameworkEnum.LANGCHAIN
                 )
 
-            llm = orchestrator_llm
+            # Primary LLM: orchestrator for deep research, single `llm` for shallow/other single-LLM agents.
+            if orchestrator_llm is not None:
+                llm = orchestrator_llm
+            elif hasattr(fn_config, "llm") and fn_config.llm:
+                llm = await builder.get_llm(fn_config.llm, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
+            else:
+                raise ValueError(f"Agent config {agent_config_name!r} has neither 'orchestrator_llm' nor 'llm'")
 
             tools = await builder.get_tools(tool_names=fn_config.tools, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
             if data_sources is not None:
@@ -532,36 +543,33 @@ def _create_agent_instance(
     callbacks: list,
 ):
     """
-    Create an agent instance, supporting different constructor patterns.
+    Create an agent instance, filtering kwargs to what the constructor accepts.
 
-    Tries in order:
-    1. llm_provider + tools pattern (DeepResearcherAgent style)
-    2. llm + tools pattern (simpler agents)
+    Different agents have different constructor shapes:
+      - DeepResearcherAgent:    (llm_provider, tools, max_loops, verbose, callbacks)
+      - ShallowResearcherAgent: (llm_provider, tools, max_llm_turns, max_tool_iterations, callbacks)
+      - Simple agents:          (llm, tools, callbacks)
+
+    Rather than cascade try/except TypeError (which is brittle if a constructor
+    raises TypeError for an unrelated reason), we introspect the constructor
+    signature and pass only the kwargs it accepts.
     """
-    # Try llm_provider pattern first (DeepResearcherAgent)
-    try:
-        return agent_cls(
-            llm_provider=llm_provider,
-            tools=tools,
-            max_loops=getattr(fn_config, "max_loops", 3),
-            verbose=verbose,
-            callbacks=callbacks,
-        )
-    except TypeError:
-        pass
+    candidates = {
+        "llm_provider": llm_provider,
+        "llm": llm,
+        "tools": tools,
+        "max_loops": getattr(fn_config, "max_loops", None),
+        "max_llm_turns": getattr(fn_config, "max_llm_turns", None),
+        "max_tool_iterations": getattr(fn_config, "max_tool_iterations", None),
+        "verbose": verbose,
+        "callbacks": callbacks,
+    }
 
-    # Try simpler llm + tools pattern
-    try:
-        return agent_cls(
-            llm=llm,
-            tools=tools,
-            callbacks=callbacks,
-        )
-    except TypeError:
-        pass
+    sig = inspect.signature(agent_cls.__init__)
+    accepted = set(sig.parameters)
+    kwargs = {k: v for k, v in candidates.items() if k in accepted and v is not None}
 
-    # Fallback: just callbacks
-    return agent_cls(callbacks=callbacks)
+    return agent_cls(**kwargs)
 
 
 async def _run_agent(
