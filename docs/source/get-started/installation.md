@@ -135,6 +135,27 @@ Then edit `deploy/.env` and fill in your keys.
 
 At minimum, you need `NVIDIA_API_KEY` for LLM inference and `TAVILY_API_KEY` for web search. Paper search (`SERPER_API_KEY`) is disabled by default in the shipped configs -- refer to the comments in your config file to enable it.
 
+### OpenAI-compatible Endpoints (vLLM / MaaS)
+
+If you plan to run against a local vLLM server, a Red Hat Model-as-a-Service (MaaS) endpoint, or any other OpenAI-compatible backend instead of NVIDIA NIM, set the following variables in `deploy/.env` and launch with `configs/config_web_vllm.yml`. When `VLLM_BASE_URL` is set, `NVIDIA_API_KEY` is not required.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `VLLM_BASE_URL` | `http://localhost:8000` | Base URL of your vLLM / MaaS server |
+| `VLLM_API_KEY` | `no-key` | API key or bearer token (vLLM accepts any string when auth is disabled) |
+| `VLLM_INTENT_MODEL` | `meta-llama/Llama-3.1-8B-Instruct` | Model for intent classification |
+| `VLLM_RESEARCHER_MODEL` | `meta-llama/Llama-3.1-70B-Instruct` | Model for shallow research and agent work |
+| `VLLM_ORCHESTRATOR_MODEL` | `Qwen/Qwen2.5-72B-Instruct` | Model for deep research orchestration and planning |
+| `VLLM_SUMMARY_MODEL` | `meta-llama/Llama-3.1-8B-Instruct` | Model for document summarization |
+
+Refer to [Migrating to vLLM](../customization/vllm-migration.md) for a complete walkthrough and [MaaS Recipe: Kimi K2.5](../customization/maas-kimi-k25.md) for the Red Hat MaaS configuration.
+
+### Evaluation
+
+| Variable | Provider | Purpose |
+|----------|----------|---------|
+| `OPENAI_API_KEY` | [OpenAI](https://platform.openai.com/) | Judge models (gpt-4o) used by `nat eval` runs. Not needed for normal inference. |
+
 ## Verify Installation
 
 Confirm that the NeMo Agent Toolkit CLI is available and can find the project plugins:

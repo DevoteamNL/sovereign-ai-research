@@ -22,6 +22,23 @@ NVIDIA_API_KEY=nvapi-...
 TAVILY_API_KEY=tvly-...
 ```
 
+### Using vLLM, Red Hat MaaS, or another OpenAI-compatible endpoint
+
+The defaults target NVIDIA NIM via the NVIDIA API Catalog. To run against a local vLLM server, a Red Hat MaaS endpoint, or any other OpenAI-compatible backend, set the `VLLM_*` block in `deploy/.env` instead and launch with the vLLM config:
+
+```bash
+VLLM_BASE_URL=http://localhost:8000          # or your MaaS base URL
+VLLM_API_KEY=no-key                          # or a bearer token for MaaS
+VLLM_INTENT_MODEL=meta-llama/Llama-3.1-8B-Instruct
+VLLM_RESEARCHER_MODEL=meta-llama/Llama-3.1-70B-Instruct
+VLLM_ORCHESTRATOR_MODEL=Qwen/Qwen2.5-72B-Instruct
+VLLM_SUMMARY_MODEL=meta-llama/Llama-3.1-8B-Instruct
+```
+
+Then pass `configs/config_web_vllm.yml` as the config file (e.g. `CONFIG_FILE=configs/config_web_vllm.yml ./scripts/start_e2e.sh` or `--config_file configs/config_web_vllm.yml` for the CLI). When a `VLLM_BASE_URL` is set, `NVIDIA_API_KEY` is not required.
+
+See [Migrating to vLLM](../customization/vllm-migration.md) for a full walkthrough and [MaaS Recipe: Kimi K2.5](../customization/maas-kimi-k25.md) for the Red Hat MaaS configuration used in this project.
+
 ## Step 2: Choose a Mode
 
 The AI-Q blueprint supports two primary modes for interactive use: a terminal-based CLI and a browser-based web UI.
