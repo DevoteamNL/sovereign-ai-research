@@ -35,7 +35,20 @@ VLLM_ORCHESTRATOR_MODEL=Qwen/Qwen2.5-72B-Instruct
 VLLM_SUMMARY_MODEL=meta-llama/Llama-3.1-8B-Instruct
 ```
 
-Then pass `configs/config_web_vllm.yml` as the config file (e.g. `CONFIG_FILE=configs/config_web_vllm.yml ./scripts/start_e2e.sh` or `--config_file configs/config_web_vllm.yml` for the CLI). When a `VLLM_BASE_URL` is set, `NVIDIA_API_KEY` is not required.
+Then launch with `configs/config_web_vllm.yml`:
+
+```bash
+# Web UI (backend + frontend)
+./scripts/start_e2e.sh --config_file configs/config_web_vllm.yml
+
+# CLI
+./scripts/start_cli.sh --config_file configs/config_web_vllm.yml
+
+# Raw NAT (no helper script)
+CONFIG_FILE=configs/config_web_vllm.yml nat serve
+```
+
+The helper scripts accept the config only via `--config_file`; the `CONFIG_FILE=...` env-var form is honored by `nat serve` directly. When `VLLM_BASE_URL` is set, `NVIDIA_API_KEY` is not required.
 
 See [Migrating to vLLM](../customization/vllm-migration.md) for a full walkthrough and [MaaS Recipe: Kimi K2.5](../customization/maas-kimi-k25.md) for the Red Hat MaaS configuration used in this project.
 
