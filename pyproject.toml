@@ -206,6 +206,7 @@ override-dependencies = [
     "pillow>=12.2.0,<13",
     "pygments>=2.20.0,<3",
     "pyopenssl>=26.0.0,<27",
+    "pytest>=9.0.3",          # CVE floor (captures upstream #192)
     "tornado>=6.5.5",
 ]
 
