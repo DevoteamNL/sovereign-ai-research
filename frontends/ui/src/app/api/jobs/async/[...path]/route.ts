@@ -26,6 +26,7 @@
 
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { ACCESS_CHANNEL_HEADER } from '@/adapters/auth/constants'
 import { isAuthRequired } from '@/adapters/auth/config'
 
 const getBackendUrl = (): string => {
@@ -49,7 +50,7 @@ const buildBackendUrl = (path: string[]): string => {
 const getAuthHeaders = async (req: Request): Promise<Record<string, string>> => {
   // Skip auth when REQUIRE_AUTH=false - don't forward any auth info to backend
   if (!isAuthRequired()) {
-    return {}
+    return { [ACCESS_CHANNEL_HEADER]: 'ui' }
   }
 
   const authToken = req.headers.get('Authorization')
@@ -57,6 +58,7 @@ const getAuthHeaders = async (req: Request): Promise<Record<string, string>> => 
   const idToken = cookieStore.get('idToken')?.value
 
   return {
+    [ACCESS_CHANNEL_HEADER]: 'ui',
     ...(authToken ? { Authorization: authToken } : {}),
     // Forward the idToken cookie to the backend
     ...(idToken ? { Cookie: `idToken=${idToken}` } : {}),
