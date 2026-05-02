@@ -37,8 +37,7 @@ aiq:
         repository: nvcr.io/nvidia/blueprint/aiq-agent
         tag: "2.0.0"
         pullPolicy: IfNotPresent
-      imagePullSecrets:
-        - name: ngc-api
+      imagePullSecrets: []
       service:
         type: ClusterIP
         port: 8000
@@ -225,8 +224,7 @@ aiq:
         repository: nvcr.io/nvidia/blueprint/aiq-frontend
         tag: "2.0.0"
         pullPolicy: IfNotPresent
-      imagePullSecrets:
-        - name: ngc-api
+      imagePullSecrets: []
       service:
         type: ClusterIP
         port: 3000
