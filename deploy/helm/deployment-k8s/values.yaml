@@ -85,8 +85,8 @@ aiq:
       labels:
         component: backend
       route:
-        enabled: false
-        host: localhost
+        enabled: true
+        host: ""  # Leave empty for auto-generated OpenShift hostname
         tls:
           termination: edge
           insecureEdgeTerminationPolicy: Redirect
@@ -276,15 +276,15 @@ aiq:
       labels:
         component: frontend
       route:
-        enabled: false
-        host: localhost
+        enabled: true
+        host: ""  # Leave empty for auto-generated OpenShift hostname
         annotations: {}
         tls:
           termination: edge
           insecureEdgeTerminationPolicy: Redirect
       enabled: true
       ingress:
-        enabled: true
+        enabled: false  # Disabled in favor of OpenShift Route
         className: nginx
         annotations: {}
       podSecurityContext: null

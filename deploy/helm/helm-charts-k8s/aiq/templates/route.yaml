@@ -1,0 +1,31 @@
+{{- range $appName, $appConfig := .Values.apps }}
+{{- if and $appConfig.enabled $appConfig.route $appConfig.route.enabled }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "aiq.appFullname" (list $ $appName) }}
+  namespace: {{ include "aiq.namespace" $ }}
+  labels:
+    {{- include "aiq.appLabels" (list $ $appName $appConfig) | nindent 4 }}
+  {{- with $appConfig.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if $appConfig.route.host }}
+  host: {{ $appConfig.route.host }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "aiq.appFullname" (list $ $appName) }}
+    weight: 100
+  port:
+    targetPort: {{ $appConfig.port | default 8080 }}
+  {{- with $appConfig.route.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  wildcardPolicy: None
+{{- end }}
+{{- end }}
