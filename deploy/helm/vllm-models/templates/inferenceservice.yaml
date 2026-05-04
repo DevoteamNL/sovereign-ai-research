@@ -22,7 +22,7 @@ spec:
         name: vLLM
       runtime: vllm-runtime
       storageUri: {{ $model.modelUri }}
-      name: {{ $model.servedModelName }}
+      name: ''
       {{- if $model.vllmArgs }}
       args:
         - --served-model-name={{ $model.servedModelName }}
