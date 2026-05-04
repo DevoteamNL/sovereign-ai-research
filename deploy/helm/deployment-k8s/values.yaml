@@ -99,6 +99,11 @@ aiq:
       - name: postgres-init
         configMap:
           name: aiq-postgres-init
+      - name: data-storage
+        emptyDir: {}
+      volumeMounts:
+      - name: data-storage
+        mountPath: /app/data
       initContainers:
       - name: db-init
         image: bitnami/postgresql:latest
