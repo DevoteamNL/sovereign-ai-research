@@ -7,14 +7,9 @@ global:
 
 # vLLM ServingRuntime configuration
 runtime:
-  image: registry.redhat.io/rhaiis-preview/vllm-cuda-rhel9
-  tag: voxtral-realtime-1770305414
+  image: registry.redhat.io/rhaii-early-access/vllm-cuda-rhel9
+  tag: 3.4.0-ea.2
   shmSize: 2Gi  # Shared memory size for vLLM
-  # vLLM runtime arguments (applied to all models unless overridden)
-  args:
-    - --dtype=auto
-    - --max-model-len=4096
-    - --enable-chunked-prefill
 
 # ==============================================================================
 # MIG Configuration Guide

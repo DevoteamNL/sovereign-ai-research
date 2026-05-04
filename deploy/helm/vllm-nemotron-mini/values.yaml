@@ -1,0 +1,45 @@
+# vLLM Nemotron Mini 4B Helm Chart Values
+# Deploys a single vLLM inference server via KServe for AI-Q Summary model
+
+# Global settings
+global:
+  namespace: ns-aiq
+
+# vLLM ServingRuntime configuration
+runtime:
+  image: registry.redhat.io/rhaiis-preview/vllm-cuda-rhel9
+  tag: voxtral-realtime-1770305414  # Stable tag
+  shmSize: 2Gi
+
+# Model configuration
+model:
+  name: nemotron-mini-4b
+  modelUri: hf://nvidia/Nemotron-Mini-4B-Instruct
+  servedModelName: nvidia/Nemotron-Mini-4B-Instruct
+
+  # H100 MIG configuration (1x 1g.12gb slice - 12GB VRAM)
+  resources:
+    limits:
+      nvidia.com/mig-1g.12gb: "1"
+      memory: 16Gi
+      cpu: "2"
+    requests:
+      nvidia.com/mig-1g.12gb: "1"
+      memory: 12Gi
+      cpu: "1"
+
+  vllmArgs:
+    - --tensor-parallel-size=1
+    - --max-model-len=4096
+    - --trust-remote-code
+    - --gpu-memory-utilization=0.8
+
+  nodeSelector:
+    nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
+
+  tolerations: []
+
+# Service configuration
+service:
+  type: ClusterIP
+  annotations: {}
