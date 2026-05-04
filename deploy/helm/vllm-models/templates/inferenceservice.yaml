@@ -24,7 +24,6 @@ spec:
       storageUri: {{ $model.modelUri }}
       name: ''
       args:
-        - --model={{ $model.modelUri }}
         - --served-model-name={{ $model.servedModelName }}
         {{- if $model.vllmArgs }}
         {{- range $model.vllmArgs }}
