@@ -23,19 +23,14 @@ spec:
       runtime: vllm-runtime
       storageUri: {{ $model.modelUri }}
       name: ''
-      {{- if $model.vllmArgs }}
       args:
+        - --model={{ $model.modelUri }}
         - --served-model-name={{ $model.servedModelName }}
+        {{- if $model.vllmArgs }}
         {{- range $model.vllmArgs }}
         - {{ . | quote }}
         {{- end }}
-      {{- else }}
-      args:
-        - --served-model-name={{ $model.servedModelName }}
-      {{- end }}
-      env:
-        - name: SERVED_MODEL_NAME
-          value: {{ $model.servedModelName | quote }}
+        {{- end }}
       resources:
         limits:
           {{- toYaml $model.resources.limits | nindent 10 }}
