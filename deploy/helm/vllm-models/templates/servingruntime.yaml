@@ -16,7 +16,7 @@ spec:
     prometheus.io/port: '8080'
   containers:
     - name: kserve-container
-      image: {{ .Values.runtime.image }}
+      image: {{ .Values.runtime.image }}:{{ .Values.runtime.tag }}
       command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
       args:
         {{- range .Values.runtime.args }}

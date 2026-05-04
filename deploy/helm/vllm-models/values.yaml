@@ -8,6 +8,7 @@ global:
 # vLLM ServingRuntime configuration
 runtime:
   image: registry.redhat.io/rhaiis-preview/vllm-cuda-rhel9
+  tag: voxtral-realtime-1770305414
   shmSize: 2Gi  # Shared memory size for vLLM
   # vLLM runtime arguments (applied to all models unless overridden)
   args:
