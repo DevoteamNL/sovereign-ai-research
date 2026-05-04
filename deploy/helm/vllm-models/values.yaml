@@ -9,12 +9,8 @@ global:
 
 # vLLM ServingRuntime configuration
 runtime:
-  image: quay.io/opendatahub/vllm:fast
+  image: registry.redhat.io/rhaiis-preview/vllm-cuda-rhel9
   # vLLM runtime arguments (applied to all models unless overridden)
-  args:
-    - --dtype=auto
-    - --max-model-len=4096
-    - --enable-chunked-prefill
 
 # ==============================================================================
 # MIG Configuration Guide
@@ -204,11 +200,3 @@ models:
 service:
   type: ClusterIP
   annotations: {}
-
-# HuggingFace token (if accessing gated models)
-huggingfaceToken:
-  # Option 1: Reference existing secret
-  existingSecret: ""
-  existingSecretKey: "token"
-  # Option 2: Create secret from value (not recommended for production)
-  # value: ""
