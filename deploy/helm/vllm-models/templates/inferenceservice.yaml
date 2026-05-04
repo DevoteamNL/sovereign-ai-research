@@ -1,3 +1,4 @@
+{{- $root := . }}
 {{- range $name, $model := .Values.models }}
 {{- if $model.enabled }}
 ---
@@ -5,58 +6,48 @@ apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
   name: {{ $name }}
-  namespace: {{ $.Values.global.namespace }}
+  namespace: {{ $root.Values.global.namespace }}
   labels:
     app: vllm
     model: {{ $name }}
-    chart: {{ $.Chart.Name }}-{{ $.Chart.Version }}
+    chart: {{ $root.Chart.Name }}-{{ $root.Chart.Version }}
   annotations:
     serving.kserve.io/deploymentMode: RawDeployment
 spec:
   predictor:
+    minReplicas: 1
+    maxReplicas: 1
     model:
       modelFormat:
-        name: vllm
+        name: vLLM
       runtime: vllm-runtime
       storageUri: {{ $model.modelUri }}
-
-      env:
-        - name: SERVED_MODEL_NAME
-          value: {{ $model.servedModelName | quote }}
-
+      name: {{ $model.servedModelName }}
       {{- if $model.vllmArgs }}
       args:
+        - --served-model-name={{ $model.servedModelName }}
         {{- range $model.vllmArgs }}
         - {{ . | quote }}
         {{- end }}
+      {{- else }}
+      args:
+        - --served-model-name={{ $model.servedModelName }}
       {{- end }}
-
+      env:
+        - name: SERVED_MODEL_NAME
+          value: {{ $model.servedModelName | quote }}
       resources:
         limits:
           {{- toYaml $model.resources.limits | nindent 10 }}
         requests:
           {{- toYaml $model.resources.requests | nindent 10 }}
-
-      {{- if or $model.nodeSelector $model.tolerations }}
       {{- if $model.nodeSelector }}
       nodeSelector:
         {{- toYaml $model.nodeSelector | nindent 8 }}
       {{- end }}
-
-      {{- if $model.tolerations }}
-      tolerations:
-        {{- toYaml $model.tolerations | nindent 8 }}
-      {{- end }}
-      {{- end }}
-
-      {{- if $model.cache.enabled }}
-      volumes:
-        - name: model-cache
-          persistentVolumeClaim:
-            claimName: {{ $name }}-cache
-      volumeMounts:
-        - name: model-cache
-          mountPath: /root/.cache/huggingface
-      {{- end }}
+    {{- if $model.tolerations }}
+    tolerations:
+      {{- toYaml $model.tolerations | nindent 6 }}
+    {{- end }}
 {{- end }}
 {{- end }}

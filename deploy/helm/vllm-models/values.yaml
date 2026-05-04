@@ -4,13 +4,16 @@
 # Global settings
 global:
   namespace: ns-aiq
-  # Storage class for model cache
-  storageClassName: ""  # Use cluster default if not specified
 
 # vLLM ServingRuntime configuration
 runtime:
   image: registry.redhat.io/rhaiis-preview/vllm-cuda-rhel9
+  shmSize: 2Gi  # Shared memory size for vLLM
   # vLLM runtime arguments (applied to all models unless overridden)
+  args:
+    - --dtype=auto
+    - --max-model-len=4096
+    - --enable-chunked-prefill
 
 # ==============================================================================
 # MIG Configuration Guide
@@ -62,9 +65,6 @@ models:
     #   - --max-model-len=8192
     #   - --gpu-memory-utilization=0.9
 
-    cache:
-      enabled: true
-      size: 250Gi
     nodeSelector:
       nvidia.com/gpu.product: "NVIDIA-A100-SXM4-80GB"
       # For MIG: nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
@@ -109,9 +109,6 @@ models:
       - --reasoning-parser=nano_v3
       # For MIG add: --gpu-memory-utilization=0.85
 
-    cache:
-      enabled: true
-      size: 70Gi
     nodeSelector: {}
       # For MIG: nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
     tolerations: []
@@ -148,9 +145,6 @@ models:
       - --max-model-len=4096
       # For MIG add: --gpu-memory-utilization=0.8
 
-    cache:
-      enabled: true
-      size: 20Gi
     nodeSelector: {}
       # For MIG: nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
     tolerations: []
@@ -189,9 +183,6 @@ models:
   #   #   - --max-model-len=8192
   #   #   - --gpu-memory-utilization=0.9
   #
-  #   cache:
-  #     enabled: true
-  #     size: 150Gi
   #   nodeSelector: {}
   #     # For MIG: nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
   #   tolerations: []
