@@ -191,5 +191,7 @@ aiq:
         - name: ngc-api
 
     frontend:
+      env:
+        VLLM_API_KEY: no-key
       imagePullSecrets:
         - name: ngc-api
