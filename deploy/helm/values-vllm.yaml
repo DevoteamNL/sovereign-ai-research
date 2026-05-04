@@ -46,6 +46,9 @@ aiq:
         mountPath: /app/data
 
       volumes:
+      - name: postgres-init
+        configMap:
+          name: aiq-postgres-init
       - name: vllm-config
         configMap:
           name: aiq-vllm-config
