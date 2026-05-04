@@ -1,6 +1,0 @@
-apiVersion: v2
-name: vllm-nemotron-mini
-description: vLLM Nemotron Mini 4B model deployment via KServe
-type: application
-version: 0.1.0
-appVersion: "1.0"
