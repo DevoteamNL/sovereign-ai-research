@@ -89,7 +89,7 @@ aiq:
                 _type: openai
                 model_name: ${VLLM_INTENT_MODEL:-RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8}
                 base_url: ${VLLM_INTENT_BASE_URL:-${VLLM_BASE_URL:-http://localhost:8000}}/v1
-                api_key: ${VLLM_API_KEY:-no-key}
+                api_key: ${VLLM_API_KEY}
                 temperature: 0.5
                 top_p: 0.9
                 max_tokens: ${VLLM_INTENT_MAX_TOKENS:-1024}
@@ -97,7 +97,7 @@ aiq:
                 _type: openai
                 model_name: ${VLLM_RESEARCHER_MODEL:-RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8}
                 base_url: ${VLLM_BASE_URL:-http://localhost:8000}/v1
-                api_key: ${VLLM_API_KEY:-no-key}
+                api_key: ${VLLM_API_KEY}
                 temperature: 0.1
                 top_p: 0.3
                 max_tokens: ${VLLM_RESEARCHER_MAX_TOKENS:-16384}
@@ -105,7 +105,7 @@ aiq:
                 _type: openai
                 model_name: ${VLLM_ORCHESTRATOR_MODEL:-RedHatAI/gpt-oss-120b}
                 base_url: ${VLLM_ORCHESTRATOR_BASE_URL:-${VLLM_BASE_URL:-http://localhost:8000}}/v1
-                api_key: ${VLLM_API_KEY:-no-key}
+                api_key: ${VLLM_API_KEY}
                 temperature: 1.0
                 top_p: 1.0
                 max_tokens: ${VLLM_ORCHESTRATOR_MAX_TOKENS:-128000}
@@ -113,7 +113,7 @@ aiq:
                 _type: openai
                 model_name: ${VLLM_SUMMARY_MODEL:-nvidia/Nemotron-Mini-4B-Instruct}
                 base_url: ${VLLM_SUMMARY_BASE_URL:-${VLLM_BASE_URL:-http://localhost:8000}}/v1
-                api_key: ${VLLM_API_KEY:-no-key}
+                api_key: ${VLLM_API_KEY}
                 temperature: 0.3
                 max_tokens: 100
             functions:
