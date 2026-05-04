@@ -129,10 +129,6 @@ aiq:
                 _type: paper_search
                 max_results: 5
                 serper_api_key: ${SERPER_API_KEY}
-              news_search_tool:
-                _type: news_search
-                max_results: 5
-                serper_api_key: ${SERPER_API_KEY}
               knowledge_search:
                 _type: knowledge_retrieval
                 backend: llamaindex
@@ -149,7 +145,6 @@ aiq:
                 tools:
                   - web_search_tool
                   - paper_search_tool
-                  - news_search_tool
                   - knowledge_search
               clarifier_agent:
                 _type: clarifier_agent
@@ -158,7 +153,6 @@ aiq:
                 tools:
                   - web_search_tool
                   - paper_search_tool
-                  - news_search_tool
                   - knowledge_search
                 max_turns: 3
                 enable_plan_approval: true
@@ -171,7 +165,6 @@ aiq:
                 tools:
                   - web_search_tool
                   - paper_search_tool
-                  - news_search_tool
                   - knowledge_search
                 max_llm_turns: 10
                 max_tool_iterations: 5
@@ -184,7 +177,6 @@ aiq:
                 verbose: true
                 tools:
                   - paper_search_tool
-                  - news_search_tool
                   - advanced_web_search_tool
                   - knowledge_search
             workflow:
