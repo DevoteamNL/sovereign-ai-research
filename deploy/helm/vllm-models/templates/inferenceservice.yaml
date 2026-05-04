@@ -1,0 +1,62 @@
+{{- range $name, $model := .Values.models }}
+{{- if $model.enabled }}
+---
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Values.global.namespace }}
+  labels:
+    app: vllm
+    model: {{ $name }}
+    chart: {{ $.Chart.Name }}-{{ $.Chart.Version }}
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
+spec:
+  predictor:
+    model:
+      modelFormat:
+        name: vllm
+      runtime: vllm-runtime
+      storageUri: {{ $model.modelUri }}
+
+      env:
+        - name: SERVED_MODEL_NAME
+          value: {{ $model.servedModelName | quote }}
+
+      {{- if $model.vllmArgs }}
+      args:
+        {{- range $model.vllmArgs }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- end }}
+
+      resources:
+        limits:
+          {{- toYaml $model.resources.limits | nindent 10 }}
+        requests:
+          {{- toYaml $model.resources.requests | nindent 10 }}
+
+      {{- if or $model.nodeSelector $model.tolerations }}
+      {{- if $model.nodeSelector }}
+      nodeSelector:
+        {{- toYaml $model.nodeSelector | nindent 8 }}
+      {{- end }}
+
+      {{- if $model.tolerations }}
+      tolerations:
+        {{- toYaml $model.tolerations | nindent 8 }}
+      {{- end }}
+      {{- end }}
+
+      {{- if $model.cache.enabled }}
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: {{ $name }}-cache
+      volumeMounts:
+        - name: model-cache
+          mountPath: /root/.cache/huggingface
+      {{- end }}
+{{- end }}
+{{- end }}

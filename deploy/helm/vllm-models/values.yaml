@@ -1,0 +1,214 @@
+# vLLM Models Helm Chart Values
+# Deploys vLLM inference servers via KServe for AI-Q
+
+# Global settings
+global:
+  namespace: ns-aiq
+  # Storage class for model cache
+  storageClassName: ""  # Use cluster default if not specified
+
+# vLLM ServingRuntime configuration
+runtime:
+  image: quay.io/opendatahub/vllm:fast
+  # vLLM runtime arguments (applied to all models unless overridden)
+  args:
+    - --dtype=auto
+    - --max-model-len=4096
+    - --enable-chunked-prefill
+
+# ==============================================================================
+# MIG Configuration Guide
+# ==============================================================================
+# If using MIG (Multi-Instance GPU), check your available profiles with:
+#   kubectl describe node <gpu-node> | grep "nvidia.com/mig"
+#
+# Model VRAM requirements (approximate):
+#   gpt-oss-120b: ~80GB (quantized)
+#   nemotron-nano-30b (FP8): ~25-30GB
+#   nemotron-mini-4b: ~8-10GB
+#   llama-3-3-70b-fp8: ~35-40GB
+#
+# Select MIG slices that provide enough VRAM for each model. Examples below
+# use specific profiles corresponding to H100 GPUs - adjust to match your cluster's MIG configuration.
+# ==============================================================================
+
+# Model deployments
+models:
+  # Orchestrator model - RedHatAI/gpt-oss-120b
+  gpt-oss-120b:
+    enabled: true
+    modelUri: hf://RedHatAI/gpt-oss-120b
+    servedModelName: RedHatAI/gpt-oss-120b
+
+    # Option 1: Full GPU (A100 80GB or H100)
+    resources:
+      limits:
+        nvidia.com/gpu: "1"
+      requests:
+        nvidia.com/gpu: "1"
+        memory: "100Gi"
+        cpu: "8"
+    vllmArgs:
+      - --tensor-parallel-size=1
+      - --max-model-len=8192
+
+    # Option 2: H100 MIG (2x 3g.47gb slices with tensor parallelism)
+    # Uncomment and comment out Option 1 to use MIG
+    # resources:
+    #   limits:
+    #     nvidia.com/mig-3g.47gb: "2"  # 2x 47GB = 94GB total
+    #   requests:
+    #     nvidia.com/mig-3g.47gb: "2"
+    #     memory: "80Gi"
+    #     cpu: "4"
+    # vllmArgs:
+    #   - --tensor-parallel-size=2  # MUST match GPU count
+    #   - --max-model-len=8192
+    #   - --gpu-memory-utilization=0.9
+
+    cache:
+      enabled: true
+      size: 250Gi
+    nodeSelector:
+      nvidia.com/gpu.product: "NVIDIA-A100-SXM4-80GB"
+      # For MIG: nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
+    tolerations: []
+
+  # Researcher & Intent model - RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+  nemotron-nano-30b:
+    enabled: true
+    modelUri: oci://quay.io/jharmison/models:redhatai--nvidia-nemotron-3-nano-30b-a3b-fp8-modelcar
+    servedModelName: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+
+    # Option 1: Full GPU (A100 40GB+ or any H100)
+    resources:
+      limits:
+        nvidia.com/gpu: "1"
+        memory: 24Gi
+        cpu: "4"
+      requests:
+        nvidia.com/gpu: "1"
+        memory: 16Gi
+        cpu: "2"
+
+    # Option 2: H100 MIG (1x 3g.47gb slice - 47GB VRAM)
+    # Uncomment and comment out Option 1 to use MIG
+    # resources:
+    #   limits:
+    #     nvidia.com/mig-3g.47gb: "1"
+    #     memory: 32Gi
+    #     cpu: "4"
+    #   requests:
+    #     nvidia.com/mig-3g.47gb: "1"
+    #     memory: 24Gi
+    #     cpu: "2"
+
+    vllmArgs:
+      - --enable-force-include-usage
+      - --max-model-len=131072
+      - --enable-auto-tool-choice
+      - --tool-call-parser=qwen3_coder
+      - --trust-remote-code
+      - --reasoning-parser-plugin=/mnt/models/nano_v3_reasoning_parser.py
+      - --reasoning-parser=nano_v3
+      # For MIG add: --gpu-memory-utilization=0.85
+
+    cache:
+      enabled: true
+      size: 70Gi
+    nodeSelector: {}
+      # For MIG: nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
+    tolerations: []
+
+  # Summary model - nvidia/Nemotron-Mini-4B-Instruct
+  nemotron-mini-4b:
+    enabled: true
+    modelUri: hf://nvidia/Nemotron-Mini-4B-Instruct
+    servedModelName: nvidia/Nemotron-Mini-4B-Instruct
+
+    # Option 1: Full GPU (any GPU with 10GB+ VRAM)
+    resources:
+      limits:
+        nvidia.com/gpu: "1"
+      requests:
+        nvidia.com/gpu: "1"
+        memory: "16Gi"
+        cpu: "2"
+
+    # Option 2: H100 MIG (1x 1g.12gb slice - smallest slice, 12GB VRAM)
+    # Uncomment and comment out Option 1 to use MIG
+    # resources:
+    #   limits:
+    #     nvidia.com/mig-1g.12gb: "1"
+    #     memory: 16Gi
+    #     cpu: "2"
+    #   requests:
+    #     nvidia.com/mig-1g.12gb: "1"
+    #     memory: 12Gi
+    #     cpu: "1"
+
+    vllmArgs:
+      - --tensor-parallel-size=1
+      - --max-model-len=4096
+      # For MIG add: --gpu-memory-utilization=0.8
+
+    cache:
+      enabled: true
+      size: 20Gi
+    nodeSelector: {}
+      # For MIG: nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
+    tolerations: []
+
+# Optional: GPU-constrained alternative for orchestrator
+# Enable this instead of gpt-oss-120b if you have limited GPU memory
+  # llama-3-3-70b-fp8:
+  #   enabled: false
+  #   modelUri: hf://RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
+  #   servedModelName: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
+  #
+  #   # Option 1: Full GPU (A100 40GB or H100)
+  #   resources:
+  #     limits:
+  #       nvidia.com/gpu: "1"  # ~35-40GB VRAM
+  #     requests:
+  #       nvidia.com/gpu: "1"
+  #       memory: "48Gi"
+  #       cpu: "4"
+  #   vllmArgs:
+  #     - --tensor-parallel-size=1
+  #     - --max-model-len=8192
+  #
+  #   # Option 2: H100 MIG (1x 3g.47gb slice - 47GB VRAM)
+  #   # resources:
+  #   #   limits:
+  #   #     nvidia.com/mig-3g.47gb: "1"
+  #   #     memory: 48Gi
+  #   #     cpu: "4"
+  #   #   requests:
+  #   #     nvidia.com/mig-3g.47gb: "1"
+  #   #     memory: 40Gi
+  #   #     cpu: "2"
+  #   # vllmArgs:
+  #   #   - --tensor-parallel-size=1
+  #   #   - --max-model-len=8192
+  #   #   - --gpu-memory-utilization=0.9
+  #
+  #   cache:
+  #     enabled: true
+  #     size: 150Gi
+  #   nodeSelector: {}
+  #     # For MIG: nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
+  #   tolerations: []
+
+# Service configuration
+service:
+  type: ClusterIP
+  annotations: {}
+
+# HuggingFace token (if accessing gated models)
+huggingfaceToken:
+  # Option 1: Reference existing secret
+  existingSecret: ""
+  existingSecretKey: "token"
+  # Option 2: Create secret from value (not recommended for production)
+  # value: ""

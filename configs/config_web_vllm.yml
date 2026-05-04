@@ -36,13 +36,13 @@ general:
         - "*"
 
 llms:
-  # Intent classification — fast, small model
+  # Intent classification
   # Defaults to VLLM_BASE_URL (same endpoint as other roles). Only set
   # VLLM_INTENT_BASE_URL when running a mixed-model setup where intent
   # classification is served by a separate vLLM instance from the other LLMs.
   intent_llm:
     _type: openai
-    model_name: ${VLLM_INTENT_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+    model_name: ${VLLM_INTENT_MODEL:-RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8}
     base_url: ${VLLM_INTENT_BASE_URL:-${VLLM_BASE_URL:-http://localhost:8000}}/v1
     api_key: ${VLLM_API_KEY:-no-key}
     temperature: 0.5
@@ -52,7 +52,7 @@ llms:
   # Shallow research and general agent work
   researcher_llm:
     _type: openai
-    model_name: ${VLLM_RESEARCHER_MODEL:-meta-llama/Llama-3.1-70B-Instruct}
+    model_name: ${VLLM_RESEARCHER_MODEL:-RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8}
     base_url: ${VLLM_BASE_URL:-http://localhost:8000}/v1
     api_key: ${VLLM_API_KEY:-no-key}
     temperature: 0.1
@@ -60,20 +60,24 @@ llms:
     max_tokens: ${VLLM_RESEARCHER_MAX_TOKENS:-16384}
 
   # Deep research orchestrator and planner — large context model
+  # Default: RedHatAI/gpt-oss-120b (120B, ~80GB VRAM quantized)
+  # GPU-constrained alternative: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic (70B FP8, ~35-40GB VRAM)
+  # Set VLLM_ORCHESTRATOR_BASE_URL when orchestrator runs on separate vLLM instance
   orchestrator_llm:
     _type: openai
-    model_name: ${VLLM_ORCHESTRATOR_MODEL:-Qwen/Qwen2.5-72B-Instruct}
-    base_url: ${VLLM_BASE_URL:-http://localhost:8000}/v1
+    model_name: ${VLLM_ORCHESTRATOR_MODEL:-RedHatAI/gpt-oss-120b}
+    base_url: ${VLLM_ORCHESTRATOR_BASE_URL:-${VLLM_BASE_URL:-http://localhost:8000}}/v1
     api_key: ${VLLM_API_KEY:-no-key}
     temperature: 1.0
     top_p: 1.0
     max_tokens: ${VLLM_ORCHESTRATOR_MAX_TOKENS:-128000}
 
   # Document summarization — small, fast model
+  # Set VLLM_SUMMARY_BASE_URL when summary model runs on separate vLLM instance
   summary_llm:
     _type: openai
-    model_name: ${VLLM_SUMMARY_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
-    base_url: ${VLLM_BASE_URL:-http://localhost:8000}/v1
+    model_name: ${VLLM_SUMMARY_MODEL:-nvidia/Nemotron-Mini-4B-Instruct}
+    base_url: ${VLLM_SUMMARY_BASE_URL:-${VLLM_BASE_URL:-http://localhost:8000}}/v1
     api_key: ${VLLM_API_KEY:-no-key}
     temperature: 0.3
     max_tokens: 100
