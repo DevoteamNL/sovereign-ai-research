@@ -148,6 +148,7 @@ aiq:
                 _type: knowledge_retrieval
                 backend: foundational_rag
                 collection_name: ${COLLECTION_NAME:-default_collection}
+                summary_db: ${AIQ_SUMMARY_DB:-postgresql+asyncpg://postgres:postgres@aiq-postgres:5432/aiq_jobs}
                 top_k: 5
                 rag_url: ${RAG_SERVER_URL:-http://rag-server.rag.svc.cluster.local:8081/v1}
                 ingest_url: ${RAG_INGEST_URL:-http://ingestor-server.rag.svc.cluster.local:8082/v1}
