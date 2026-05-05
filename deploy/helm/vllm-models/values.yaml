@@ -45,7 +45,7 @@ models:
         cpu: "8"
     vllmArgs:
       - --tensor-parallel-size=1
-      - --max-model-len=8192
+      - --max-model-len=131072
 
     # Option 2: H100 MIG (2x 3g.47gb slices with tensor parallelism)
     # Uncomment and comment out Option 1 to use MIG
@@ -58,7 +58,7 @@ models:
     #     cpu: "4"
     # vllmArgs:
     #   - --tensor-parallel-size=2  # MUST match GPU count
-    #   - --max-model-len=8192
+    #   - --max-model-len=131072
     #   - --gpu-memory-utilization=0.9
 
     nodeSelector:
@@ -119,6 +119,8 @@ models:
     resources:
       limits:
         nvidia.com/gpu: "1"
+        memory: "24Gi"
+        cpu: "4"
       requests:
         nvidia.com/gpu: "1"
         memory: "16Gi"
