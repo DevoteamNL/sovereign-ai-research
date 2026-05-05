@@ -32,7 +32,7 @@ models:
   # Orchestrator model - RedHatAI/gpt-oss-120b
   gpt-oss-120b:
     enabled: true
-    modelUri: hf://RedHatAI/gpt-oss-120b
+    modelUri: oci://registry.redhat.io/rhelai1/modelcar-gpt-oss-120b:1.5
     servedModelName: RedHatAI/gpt-oss-120b
 
     # Option 1: Full GPU (A100 80GB or H100)
@@ -46,6 +46,9 @@ models:
     vllmArgs:
       - --tensor-parallel-size=1
       - --max-model-len=131072
+      - --enable-force-include-usage
+      - --enable-auto-tool-choice
+      - --tool-call-parser=openai
 
     # Option 2: H100 MIG (2x 3g.47gb slices with tensor parallelism)
     # Uncomment and comment out Option 1 to use MIG
@@ -60,6 +63,9 @@ models:
     #   - --tensor-parallel-size=2  # MUST match GPU count
     #   - --max-model-len=131072
     #   - --gpu-memory-utilization=0.9
+    #   - --enable-force-include-usage
+    #   - --enable-auto-tool-choice
+    #   - --tool-call-parser=openai
 
     nodeSelector:
       nvidia.com/gpu.product: "NVIDIA-A100-SXM4-80GB"
