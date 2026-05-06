@@ -1,0 +1,35 @@
+# AI-Q Helm Values - Foundational RAG Configuration
+#
+# This configuration connects to an external NVIDIA RAG Blueprint deployment.
+#
+# Prerequisites:
+# - NVIDIA RAG Blueprint deployed and accessible
+# - Know your RAG server URLs (query and ingestion endpoints)
+#
+# Usage:
+#   helm upgrade --install aiq deployment-k8s/ -n ns-aiq \
+#     -f values-frag.yaml \
+#     --set aiq.apps.backend.env.RAG_SERVER_URL=http://rag-server.rag-ns.svc.cluster.local:8081/v1 \
+#     --set aiq.apps.backend.env.RAG_INGEST_URL=http://ingestor-server.rag-ns.svc.cluster.local:8082/v1
+
+aiq:
+  apps:
+    backend:
+      env:
+        CONFIG_FILE: configs/config_web_frag.yml
+
+        # REQUIRED: Update these to your RAG Blueprint endpoints
+        # If RAG is in the same cluster, use internal service DNS:
+        # http://rag-server.<rag-namespace>.svc.cluster.local:8081/v1
+        RAG_SERVER_URL: http://rag-server.rag.svc.cluster.local:8081/v1
+        RAG_INGEST_URL: http://ingestor-server.rag.svc.cluster.local:8082/v1
+
+        # Optional: Collection name for document storage
+        # COLLECTION_NAME: default_collection
+
+      imagePullSecrets:
+        - name: ngc-api
+
+    frontend:
+      imagePullSecrets:
+        - name: ngc-api
