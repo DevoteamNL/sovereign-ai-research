@@ -1,0 +1,460 @@
+# Customizing AI-Q for Red Hat OpenShift AI
+
+This quickstart deploys AI-Q using pre-built container images on Red Hat OpenShift AI. This guide covers configuration changes, model selection for the 4 deployment options, and when you need to build custom images.
+
+## Table of Contents
+
+- [Quick Configuration Changes](#quick-configuration-changes)
+- [The 4 Deployment Options](#the-4-deployment-options)
+- [Model Selection](#model-selection)
+- [Knowledge Layer Configuration](#knowledge-layer-configuration)
+- [Agent Behavior Tuning](#agent-behavior-tuning)
+- [Building Custom Images](#building-custom-images)
+- [Additional Resources](#additional-resources)
+
+---
+
+## Quick Configuration Changes
+
+These changes don't require rebuilding containers—just edit Helm values and redeploy.
+
+### Update API Keys
+
+Configure data source API keys via the `aiq-credentials` secret:
+
+```bash
+oc create secret generic aiq-credentials -n ns-aiq \
+  --from-literal=NVIDIA_API_KEY="$NVIDIA_API_KEY" \
+  --from-literal=TAVILY_API_KEY="$TAVILY_API_KEY" \
+  --from-literal=SERPER_API_KEY="$SERPER_API_KEY" \
+  --dry-run=client -o yaml | oc apply -f -
+
+# Restart backend to pick up changes
+oc rollout restart deployment -n ns-aiq aiq-backend
+```
+
+### Edit Agent Parameters
+
+Modify inline ConfigMaps in your values file (e.g., `values-vllm.yaml`):
+
+```yaml
+configMaps:
+  - name: aiq-vllm-config
+    data:
+      config_web_vllm.yml: |
+        functions:
+          shallow_research_agent:
+            max_llm_turns: 10        # Increase for deeper shallow research
+            max_tool_iterations: 5   # Increase for more tool calls
+          
+          deep_research_agent:
+            max_loops: 2             # Increase for more research iterations
+```
+
+Apply changes:
+
+```bash
+helm upgrade aiq deployment-k8s/ -n ns-aiq -f values-vllm.yaml
+```
+
+---
+
+## The 4 Deployment Options
+
+This quickstart supports four deployment configurations:
+
+| Option | Models | Knowledge | Values File | Use Case |
+|--------|--------|-----------|-------------|----------|
+| **A** | vLLM (local GPUs) | LlamaIndex | `values-vllm.yaml` | Production, data privacy |
+| **B** | NGC (cloud) | LlamaIndex | `values.yaml` (default) | Quick start, no GPU |
+| **C** | vLLM (local GPUs) | RAG Blueprint | `values-vllm-frag.yaml` | Production, advanced RAG |
+| **D** | NGC (cloud) | RAG Blueprint | `values-frag.yaml` | Quick start + advanced RAG |
+
+### Option A & C: vLLM on KServe (Local GPUs)
+
+**Models run on your GPUs using vLLM** via KServe InferenceServices. This gives you:
+- Full control over model selection
+- Data stays on-premises
+- Cost efficiency for high-volume usage
+
+**Model configuration:** `deploy/helm/vllm-models/values.yaml`
+
+### Option B & D: NGC Cloud Inference
+
+**Models run on NVIDIA's hosted API**. This gives you:
+- No GPU infrastructure required
+- Quick deployment
+- Pay-per-use pricing
+
+**Model configuration:** Inline ConfigMaps in values files
+
+### Options C & D: RAG Blueprint Integration
+
+**External NVIDIA RAG Blueprint** for knowledge retrieval. This provides:
+- Advanced multimodal document processing
+- GPU-accelerated vector search
+- Production-grade scalability
+
+Requires deploying the RAG Blueprint separately (see [AML RAG Quickstart](https://github.com/rh-ai-quickstart/aml-rag-nvidia)).
+
+---
+
+## Model Selection
+
+### vLLM Model Selection (Options A & C)
+
+Edit `deploy/helm/vllm-models/values.yaml` to change models:
+
+```yaml
+models:
+  # Orchestrator - large reasoning model
+  gpt-oss-120b:
+    enabled: true
+    modelUri: oci://registry.redhat.io/rhelai1/modelcar-gpt-oss-120b:1.5
+    servedModelName: RedHatAI/gpt-oss-120b
+    resources:
+      limits:
+        nvidia.com/gpu: "1"     # Adjust for model size
+    vllmArgs:
+      - --tensor-parallel-size=1
+      - --max-model-len=131072
+  
+  # Researcher - fast, efficient model
+  nemotron-nano-30b:
+    enabled: true
+    modelUri: oci://quay.io/jharmison/models:redhatai--nvidia-nemotron-3-nano-30b-a3b-fp8-modelcar
+    servedModelName: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+    resources:
+      limits:
+        nvidia.com/gpu: "1"
+    vllmArgs:
+      - --max-model-len=131072
+      - --enable-auto-tool-choice
+      - --tool-call-parser=qwen3_coder
+```
+
+**To swap vLLM models:**
+1. Change `modelUri` to HuggingFace model ID (e.g., `hf://meta-llama/Llama-3.3-70B-Instruct`) or OCI registry
+2. Update `servedModelName` to match
+3. Adjust GPU resources for new model's VRAM requirements
+4. Redeploy: `helm upgrade vllm-models vllm-models/ -n ns-aiq`
+
+**vLLM Configuration in Backend:**
+
+The backend connects to vLLM models using `_type: openai` (OpenAI-compatible API):
+
+```yaml
+llms:
+  researcher_llm:
+    _type: openai                    # Use 'openai' for vLLM endpoints
+    model_name: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+    base_url: http://nemotron-nano-30b-predictor.ns-aiq.svc.cluster.local:8080/v1
+    api_key: no-key                  # vLLM doesn't require auth by default
+    temperature: 0.1
+    max_tokens: 16384
+```
+
+**Important - vLLM vs NIM Configuration:**
+
+| Parameter | vLLM (`_type: openai`) | NIM (`_type: nim`) |
+|-----------|------------------------|-------------------|
+| `_type` | `openai` | `nim` |
+| `api_key` | `no-key` or omit | `${NVIDIA_API_KEY}` |
+| `chat_template_kwargs` | **DO NOT USE** | `enable_thinking: true` (optional) |
+
+**⚠️ Critical:** `chat_template_kwargs` is NIM-only. If you add it to vLLM configs, the `/think` directives will appear as literal text in responses.
+
+### NGC Model Selection (Options B & D)
+
+Edit inline ConfigMaps in your values file:
+
+```yaml
+configMaps:
+  - name: aiq-frag-config
+    data:
+      config_web_frag.yml: |
+        llms:
+          gpt_oss_llm:
+            _type: nim
+            model_name: openai/gpt-oss-120b    # Change model here
+            base_url: https://integrate.api.nvidia.com/v1
+            temperature: 1.0
+            max_tokens: 256000
+            chat_template_kwargs:
+              enable_thinking: true            # NIM only - enables chain-of-thought
+```
+
+Browse available NGC models at [build.nvidia.com](https://build.nvidia.com/explore/discover).
+
+### LLM Parameters by Role
+
+Different agents benefit from different temperature/token settings:
+
+| Role | Temperature | Top-p | Max Tokens | Why |
+|------|------------|-------|------------|-----|
+| Intent classifier | `0.5` | `0.9` | `4096` | Moderate creativity for classification |
+| Shallow researcher | `0.1` | `0.3` | `16384` | Low temperature for factual accuracy |
+| Deep orchestrator | `1.0` | `1.0` | `128000` | High creativity for complex reasoning |
+| Summary model | `0.3` | `0.7` | `100` | Conservative, concise summaries |
+
+---
+
+## Knowledge Layer Configuration
+
+AI-Q supports two knowledge retrieval backends. Your deployment option determines which you use.
+
+### LlamaIndex (Options A & B)
+
+**Embedded in the backend pod** - no external dependencies.
+
+```yaml
+functions:
+  knowledge_search:
+    _type: knowledge_retrieval
+    backend: llamaindex
+    collection_name: ${COLLECTION_NAME:-default_collection}
+    top_k: 5
+    chroma_dir: /app/data/chroma              # Persistent storage path
+```
+
+**Characteristics:**
+- Vector store: ChromaDB (embedded)
+- Best for: Quick start, simple deployments
+- Limitations: Single-pod scaling, basic document processing
+
+### RAG Blueprint (Options C & D)
+
+**External NVIDIA RAG Blueprint deployment** - advanced features.
+
+```yaml
+functions:
+  knowledge_search:
+    _type: knowledge_retrieval
+    backend: foundational_rag
+    collection_name: ${COLLECTION_NAME:-default_collection}
+    top_k: 5
+    rag_url: ${RAG_SERVER_URL:-http://rag-server.rag.svc.cluster.local:8081/v1}
+    ingest_url: ${RAG_INGEST_URL:-http://ingestor-server.rag.svc.cluster.local:8082/v1}
+    summary_db: ${AIQ_SUMMARY_DB:-postgresql+asyncpg://postgres:postgres@aiq-postgres:5432/aiq_jobs}
+    timeout: 300
+```
+
+**Characteristics:**
+- Vector store: Milvus (GPU-accelerated)
+- Document processing: NV-Ingest (multimodal extraction)
+- Best for: Production, large document sets
+- Requires: Separate RAG Blueprint deployment
+
+**Deployment:** See [AML RAG Quickstart](https://github.com/rh-ai-quickstart/aml-rag-nvidia) for RAG Blueprint installation.
+
+**Connecting to RAG Blueprint:**
+
+Set environment variables in your values file:
+
+```yaml
+# In values-vllm-frag.yaml or values-frag.yaml
+aiq:
+  apps:
+    backend:
+      env:
+        RAG_SERVER_URL: http://rag-server.rag.svc.cluster.local:8081/v1
+        RAG_INGEST_URL: http://ingestor-server.rag.svc.cluster.local:8082/v1
+        COLLECTION_NAME: my_documents
+```
+
+---
+
+## Agent Behavior Tuning
+
+### Shallow Research Agent
+
+Controls fast, bounded research with tool calls:
+
+```yaml
+functions:
+  shallow_research_agent:
+    _type: shallow_research_agent
+    llm: researcher_llm
+    tools:
+      - web_search_tool
+      - knowledge_search
+    max_llm_turns: 10                # Maximum reasoning iterations
+    max_tool_iterations: 5           # Maximum tool calls per turn
+```
+
+**When to adjust:**
+- Increase `max_llm_turns` for more thorough shallow research
+- Increase `max_tool_iterations` for more comprehensive tool usage
+- Default values balance speed vs depth
+
+### Deep Research Agent
+
+Controls multi-phase comprehensive research:
+
+```yaml
+functions:
+  deep_research_agent:
+    _type: deep_research_agent
+    orchestrator_llm: orchestrator_llm    # Large reasoning model
+    planner_llm: orchestrator_llm         # Planning model
+    researcher_llm: researcher_llm        # Research execution model
+    max_loops: 2                          # Research iteration depth
+    tools:
+      - advanced_web_search_tool
+      - knowledge_search
+```
+
+**When to adjust:**
+- Increase `max_loops` for deeper, more iterative research (slower, more comprehensive)
+- Use different LLMs for orchestrator vs researcher to balance cost/performance
+
+### Human-in-the-Loop (HITL)
+
+Control clarification and plan approval:
+
+```yaml
+# Disable clarifier entirely (skip plan approval)
+workflow:
+  _type: chat_deepresearcher_agent
+  enable_clarifier: false
+
+# Or keep clarifier but skip approval step
+functions:
+  clarifier_agent:
+    _type: clarifier_agent
+    enable_plan_approval: false
+```
+
+### Tool Configuration
+
+**Web Search (Tavily):**
+
+```yaml
+functions:
+  web_search_tool:
+    _type: tavily_web_search
+    max_results: 5                  # Number of search results
+    max_content_length: 1000        # Truncate results for token efficiency
+  
+  advanced_web_search_tool:
+    _type: tavily_web_search
+    max_results: 2
+    advanced_search: true           # Deeper search, slower
+```
+
+**Paper Search (Google Scholar via Serper):**
+
+```yaml
+functions:
+  paper_search_tool:
+    _type: paper_search
+    max_results: 5
+    serper_api_key: ${SERPER_API_KEY}
+```
+
+---
+
+## Building Custom Images
+
+For UI customization, agent logic changes, or adding features, you'll need to build custom container images.
+
+### Container Images & Versioning
+
+This quickstart is based on **NVIDIA AI-Q Blueprint v2.1.0**:
+
+- **Backend:** [NVIDIA AI-Q v2.1.0](https://github.com/NVIDIA-AI-Blueprints/aiq/tree/v2.1.0)
+- **Frontend:** [NVIDIA AI-Q v2.1.0](https://github.com/NVIDIA-AI-Blueprints/aiq/tree/v2.1.0)
+
+### Build Process
+
+**1. Clone upstream at v2.1.0:**
+
+```bash
+git clone -b v2.1.0 https://github.com/NVIDIA-AI-Blueprints/aiq
+cd aiq
+```
+
+**2. Make your changes:**
+
+- **UI customization:** Edit `frontends/ui/` (Next.js app)
+- **Agent logic:** Edit `src/aiq_agent/` (Python code)
+- **Branding:** Colors, logos, fonts
+
+**3. Build images:**
+
+```bash
+# Backend
+docker build -f deploy/Dockerfile \
+  -t your-registry.io/aiq-backend:custom .
+
+# Frontend
+docker build -f frontends/ui/Dockerfile \
+  -t your-registry.io/aiq-frontend:custom \
+  frontends/ui/
+```
+
+**4. Push to registry:**
+
+```bash
+docker push your-registry.io/aiq-backend:custom
+docker push your-registry.io/aiq-frontend:custom
+```
+
+**5. Update Helm values:**
+
+```yaml
+aiq:
+  apps:
+    backend:
+      image:
+        repository: your-registry.io/aiq-backend
+        tag: custom
+        pullPolicy: Always
+    frontend:
+      image:
+        repository: your-registry.io/aiq-frontend
+        tag: custom
+        pullPolicy: Always
+```
+
+**6. Deploy:**
+
+```bash
+helm upgrade --install aiq deployment-k8s/ -n ns-aiq -f values-vllm.yaml
+```
+
+### Version Alignment Warning
+
+**⚠️ Critical:** Always build from v2.1.0 to match this quickstart's Helm charts and configurations.
+
+- **Quickstart version:** v2.1.0
+- **Upstream tag:** `v2.1.0`
+- **Repository:** https://github.com/NVIDIA-AI-Blueprints/aiq/tree/v2.1.0
+
+Using a different version may cause incompatibilities.
+
+---
+
+## Additional Resources
+
+### Deployment Documentation
+
+- **DEPLOYMENT-GUIDE.md** - Detailed deployment instructions for all 4 options
+- **Configuration Reference** - Complete YAML parameter reference (see `docs/configuration-reference.md`)
+
+### Upstream Resources
+
+- **NVIDIA NeMo Agent Toolkit:** [Documentation](https://docs.nvidia.com/nemo/agent-toolkit/latest/)
+- **Upstream AI-Q Blueprint:** [Repository](https://github.com/NVIDIA-AI-Blueprints/aiq)
+- **vLLM Documentation:** [vllm.ai](https://vllm.ai/)
+
+### Related Quickstarts
+
+- **AML RAG Quickstart:** [GitHub](https://github.com/rh-ai-quickstart/aml-rag-nvidia) - For RAG Blueprint deployment (Options C & D)
+- **Red Hat AI Quickstarts:** [Collection](https://www.redhat.com/en/blog/introducing-ai-quickstarts)
+
+### Support
+
+- **This quickstart:** [GitHub Issues](https://github.com/rh-ai-quickstart/rh-research/issues)
+- **Upstream AI-Q:** [Issues](https://github.com/NVIDIA-AI-Blueprints/aiq/issues)
+- **NeMo Agent Toolkit:** [Documentation](https://docs.nvidia.com/nemo/agent-toolkit/latest/)
