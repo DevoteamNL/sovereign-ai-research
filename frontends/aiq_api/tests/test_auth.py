@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
+import types
 from datetime import UTC
 from datetime import datetime
 from datetime import timedelta
@@ -35,9 +37,12 @@ from jwt.algorithms import RSAAlgorithm
 
 from aiq_api.auth import AuthMiddleware
 from aiq_api.auth import JWTValidator
+from aiq_api.auth import TokenExpiredError
+from aiq_api.auth import TokenInvalidError
 from aiq_api.auth import TokenValidator
 from aiq_api.auth import get_current_user
 from aiq_api.auth import middleware as middleware_module
+from aiq_api.auth.errors import AuthError
 
 # ---------------------------------------------------------------------------
 # TokenValidator (ABC)
@@ -103,9 +108,10 @@ class TestJWTValidatorValidate:
 
         validator = JWTValidator(issuer, audience="my-api", jwks_uri="https://unused/jwks")
         with patch.object(validator, "_get_signing_key", return_value=jwk):
-            out = await validator.validate(token)
+            out, error = await validator.validate(token)
 
         assert out is not None
+        assert error is None
         assert out["sub"] == "user-1"
         assert out["type"] == "jwt"
         assert out["token"] == token
@@ -116,7 +122,9 @@ class TestJWTValidatorValidate:
     async def test_returns_none_when_no_signing_key(self) -> None:
         validator = JWTValidator("https://issuer.example", jwks_uri="https://unused/jwks")
         with patch.object(validator, "_get_signing_key", return_value=None):
-            assert await validator.validate("any.token.here") is None
+            user, error = await validator.validate("any.token.here")
+            assert user is None
+            assert error == "token_invalid"
 
     @pytest.mark.asyncio
     async def test_returns_none_on_expired_token(self) -> None:
@@ -134,7 +142,9 @@ class TestJWTValidatorValidate:
 
         validator = JWTValidator(issuer, jwks_uri="https://unused/jwks")
         with patch.object(validator, "_get_signing_key", return_value=jwk):
-            assert await validator.validate(token) is None
+            user, error = await validator.validate(token)
+            assert user is None
+            assert error == "token_expired"
 
     @pytest.mark.asyncio
     async def test_skips_audience_when_not_configured(self) -> None:
@@ -152,8 +162,9 @@ class TestJWTValidatorValidate:
 
         validator = JWTValidator(issuer, audience=None, jwks_uri="https://unused/jwks")
         with patch.object(validator, "_get_signing_key", return_value=jwk):
-            out = await validator.validate(token)
+            out, error = await validator.validate(token)
         assert out is not None and out["sub"] == "user-2"
+        assert error is None
         assert out["type"] == "jwt"
         assert out["token"] == token
         assert out["skip_clarifier"] is False
@@ -176,6 +187,7 @@ class TestJWTValidatorGetSigningKey:
         assert validator._jwks_uri == "https://issuer/jwks"
 
     def test_matches_key_by_kid(self) -> None:
+
         validator = JWTValidator("https://issuer.example", jwks_uri="https://issuer/jwks")
         k1, k2 = MagicMock(), MagicMock()
         validator._cached_keys = [("kid-1", k1), ("kid-2", k2)]
@@ -324,7 +336,7 @@ class TestAuthMiddlewareAuthFlow:
         app, _state = capture_asgi
         mock_v = MagicMock()
         mock_v.can_handle.return_value = True
-        mock_v.validate = AsyncMock(return_value=None)
+        mock_v.validate = AsyncMock(return_value=(None, "token_invalid"))
         mw = AuthMiddleware(
             app,
             validators=[mock_v],
@@ -344,6 +356,9 @@ class TestAuthMiddlewareAuthFlow:
         await mw(scope, AsyncMock(), send)
 
         assert messages[0]["status"] == 401
+        body = json.loads(messages[1]["body"].decode())
+        assert body["error"] == "token_invalid"
+        assert body["detail"] == "Invalid auth token"
 
     @pytest.mark.asyncio
     async def test_require_auth_success_sets_user_and_headless_flag(self, capture_asgi, external_host):
@@ -351,7 +366,7 @@ class TestAuthMiddlewareAuthFlow:
         user = {"type": "oidc", "sub": "u1", "token": "t"}
         mock_v = MagicMock()
         mock_v.can_handle.return_value = True
-        mock_v.validate = AsyncMock(return_value=user)
+        mock_v.validate = AsyncMock(return_value=(user, None))
         mw = AuthMiddleware(
             app,
             validators=[mock_v],
@@ -384,7 +399,7 @@ class TestAuthMiddlewareAuthFlow:
         v1.validate = AsyncMock()
         v2 = MagicMock()
         v2.can_handle.return_value = True
-        v2.validate = AsyncMock(return_value={"type": "x", "token": "z"})
+        v2.validate = AsyncMock(return_value=({"type": "x", "token": "z"}, None))
         mw = AuthMiddleware(
             app,
             validators=[v1, v2],
@@ -409,30 +424,32 @@ class TestAuthMiddlewareAuthFlow:
 
 class TestAuthMiddlewareInternal:
     @pytest.mark.asyncio
-    async def test_internal_sets_jwt_user_for_bearer_jwt(self, capture_asgi):
+    async def test_internal_validates_bearer_jwt_when_validator_accepts(self, capture_asgi):
         app, state = capture_asgi
-        mw = AuthMiddleware(app, require_auth=True, external_hostnames=set())
-        token = middleware_module._current_user.set({})
+        mock_v = MagicMock()
+        mock_v.can_handle.return_value = True
+        mock_v.validate = AsyncMock(return_value={"type": "oidc", "sub": "user-1", "token": "good"})
+        mw = AuthMiddleware(app, validators=[mock_v], require_auth=True, external_hostnames=set())
 
         async def send(msg):
             pass
 
-        try:
-            scope = _http_scope(
-                "/any/path",
-                extra_headers=[(b"authorization", b"Bearer eyJhbGciOiJIUzI1NiJ9.x.y")],
-            )
-            await mw(scope, AsyncMock(), send)
-        finally:
-            middleware_module._current_user.reset(token)
+        scope = _http_scope(
+            "/any/path",
+            extra_headers=[(b"authorization", b"Bearer eyJhbGciOiJIUzI1NiJ9.x.y")],
+        )
+        await mw(scope, AsyncMock(), send)
 
-        assert state["user"]["type"] == "jwt"
-        assert state["user"]["token"] == "eyJhbGciOiJIUzI1NiJ9.x.y"
+        assert state["user"]["type"] == "oidc"
+        assert state["user"]["sub"] == "user-1"
 
     @pytest.mark.asyncio
-    async def test_internal_idtoken_cookie(self, capture_asgi):
+    async def test_internal_idtoken_cookie_stays_unverified_without_valid_identity(self, capture_asgi):
         app, state = capture_asgi
-        mw = AuthMiddleware(app, require_auth=False, external_hostnames=set())
+        mock_v = MagicMock()
+        mock_v.can_handle.return_value = True
+        mock_v.validate = AsyncMock(return_value=None)
+        mw = AuthMiddleware(app, validators=[mock_v], require_auth=False, external_hostnames=set())
 
         async def send(msg):
             pass
@@ -443,8 +460,427 @@ class TestAuthMiddlewareInternal:
         )
         await mw(scope, AsyncMock(), send)
 
-        assert state["user"]["type"] == "jwt"
+        assert state["user"]["type"] == "unverified_jwt"
         assert state["user"]["token"] == "cookieval"
+
+    @pytest.mark.asyncio
+    async def test_internal_invalid_bearer_token_falls_back_to_internal_when_auth_not_required(self, capture_asgi):
+        app, state = capture_asgi
+        mock_v = MagicMock()
+        mock_v.can_handle.return_value = True
+        mock_v.validate = AsyncMock(return_value=None)
+        mw = AuthMiddleware(app, validators=[mock_v], require_auth=False, external_hostnames=set())
+
+        async def send(msg):
+            pass
+
+        scope = _http_scope(
+            "/any/path",
+            extra_headers=[(b"authorization", b"Bearer badtoken")],
+        )
+        await mw(scope, AsyncMock(), send)
+
+        assert state["user"]["type"] == "unverified_jwt"
+        assert state["user"]["token"] == "badtoken"
+
+    @pytest.mark.asyncio
+    async def test_verified_user_tags_active_ddtrace_span(self, capture_asgi):
+        app, _state = capture_asgi
+        span_tags: dict[str, str] = {}
+
+        class FakeSpan:
+            def set_tag(self, key: str, value: str) -> None:
+                span_tags[key] = value
+
+        ddtrace_module = types.ModuleType("ddtrace")
+        ddtrace_module.tracer = types.SimpleNamespace(current_span=lambda: FakeSpan())
+
+        mock_v = MagicMock()
+        mock_v.can_handle.return_value = True
+        mock_v.validate = AsyncMock(
+            return_value={
+                "type": "oidc",
+                "sub": "user-123",
+                "email": "alice@example.com",
+                "name": "Alice",
+                "token": "good",
+            }
+        )
+
+        async def send(msg):
+            pass
+
+        scope = _http_scope(
+            "/chat",
+            extra_headers=[(b"authorization", b"Bearer eyJhbGciOiJIUzI1NiJ9.x.y")],
+        )
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "AIQ_TRACE_USER_IDENTITY_MODE": "full",
+                    "AIQ_TRACE_USER_IDENTITY_HMAC_SECRET": "test-secret",  # pragma: allowlist secret
+                },
+                clear=False,
+            ),
+            patch.dict(sys.modules, {"ddtrace": ddtrace_module}, clear=False),
+        ):
+            mw = AuthMiddleware(app, validators=[mock_v], require_auth=True, external_hostnames=set())
+            await mw(scope, AsyncMock(), send)
+
+        expected_id = middleware_module._build_pseudonymous_trace_user_id("oidc", "user-123", "test-secret")
+        assert span_tags == {
+            "enduser.id": expected_id,
+            "aiq.user.id": expected_id,
+            "aiq.auth.type": "oidc",
+            "aiq.user.email": "alice@example.com",
+            "aiq.user.name": "Alice",
+            "aiq.caller.type": "oidc",
+            "aiq.auth.transport": "bearer",
+            "aiq.auth.verified": "true",
+            "aiq.access.channel": "api",
+        }
+
+    @pytest.mark.asyncio
+    async def test_verified_user_tags_active_otel_span(self, capture_asgi):
+        app, _state = capture_asgi
+        span_attributes: dict[str, str] = {}
+
+        class FakeSpan:
+            def set_attribute(self, key: str, value: str) -> None:
+                span_attributes[key] = value
+
+        opentelemetry_module = types.ModuleType("opentelemetry")
+        trace_module = types.ModuleType("opentelemetry.trace")
+        trace_module.get_current_span = lambda: FakeSpan()
+
+        mock_v = MagicMock()
+        mock_v.can_handle.return_value = True
+        mock_v.validate = AsyncMock(return_value={"type": "service", "sub": "svc-user", "token": "good"})
+
+        async def send(msg):
+            pass
+
+        scope = _http_scope(
+            "/chat",
+            extra_headers=[(b"authorization", b"Bearer eyJhbGciOiJIUzI1NiJ9.x.y")],
+        )
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "AIQ_TRACE_USER_IDENTITY_MODE": "id",
+                    "AIQ_TRACE_USER_IDENTITY_HMAC_SECRET": "test-secret",  # pragma: allowlist secret
+                },
+                clear=False,
+            ),
+            patch.dict(
+                sys.modules,
+                {"opentelemetry": opentelemetry_module, "opentelemetry.trace": trace_module},
+                clear=False,
+            ),
+        ):
+            mw = AuthMiddleware(app, validators=[mock_v], require_auth=True, external_hostnames=set())
+            await mw(scope, AsyncMock(), send)
+
+        expected_id = middleware_module._build_pseudonymous_trace_user_id("service", "svc-user", "test-secret")
+        assert span_attributes == {
+            "enduser.id": expected_id,
+            "aiq.user.id": expected_id,
+            "aiq.auth.type": "service",
+            "aiq.caller.type": "service",
+            "aiq.auth.transport": "bearer",
+            "aiq.auth.verified": "true",
+            "aiq.access.channel": "api",
+        }
+
+    @pytest.mark.asyncio
+    async def test_none_mode_does_not_tag_verified_user(self, capture_asgi):
+        app, _state = capture_asgi
+        span_tags: dict[str, str] = {}
+
+        class FakeSpan:
+            def set_tag(self, key: str, value: str) -> None:
+                span_tags[key] = value
+
+        ddtrace_module = types.ModuleType("ddtrace")
+        ddtrace_module.tracer = types.SimpleNamespace(current_span=lambda: FakeSpan())
+
+        mock_v = MagicMock()
+        mock_v.can_handle.return_value = True
+        mock_v.validate = AsyncMock(return_value={"type": "oidc", "sub": "user-123", "token": "good"})
+
+        async def send(msg):
+            pass
+
+        scope = _http_scope(
+            "/chat",
+            extra_headers=[(b"authorization", b"Bearer eyJhbGciOiJIUzI1NiJ9.x.y")],
+        )
+        with (
+            patch.dict(
+                os.environ,
+                {"AIQ_TRACE_USER_IDENTITY_MODE": "none"},
+                clear=False,
+            ),
+            patch.dict(sys.modules, {"ddtrace": ddtrace_module}, clear=False),
+        ):
+            mw = AuthMiddleware(app, validators=[mock_v], require_auth=True, external_hostnames=set())
+            await mw(scope, AsyncMock(), send)
+
+        assert span_tags == {
+            "aiq.caller.type": "oidc",
+            "aiq.auth.transport": "bearer",
+            "aiq.auth.verified": "true",
+            "aiq.access.channel": "api",
+        }
+
+    @pytest.mark.asyncio
+    async def test_always_on_common_tags_present_without_user_identity(self, capture_asgi):
+        app, _state = capture_asgi
+        span_tags: dict[str, str] = {}
+
+        class FakeSpan:
+            def set_tag(self, key: str, value: str) -> None:
+                span_tags[key] = value
+
+        ddtrace_module = types.ModuleType("ddtrace")
+        ddtrace_module.tracer = types.SimpleNamespace(current_span=lambda: FakeSpan())
+
+        mock_v = MagicMock()
+        mock_v.can_handle.return_value = True
+        mock_v.validate = AsyncMock(return_value={"type": "oidc", "sub": "user-123", "token": "good"})
+
+        async def send(msg):
+            pass
+
+        scope = _http_scope(
+            "/chat",
+            extra_headers=[(b"authorization", b"Bearer eyJhbGciOiJIUzI1NiJ9.x.y")],
+        )
+        with (
+            patch.dict(
+                os.environ,
+                {"AIQ_TRACE_USER_IDENTITY_MODE": "none", "AIQ_TRACE_CLIENT_ID_MODE": "none"},
+                clear=False,
+            ),
+            patch.dict(sys.modules, {"ddtrace": ddtrace_module}, clear=False),
+        ):
+            mw = AuthMiddleware(app, validators=[mock_v], require_auth=True, external_hostnames=set())
+            await mw(scope, AsyncMock(), send)
+
+        assert span_tags == {
+            "aiq.caller.type": "oidc",
+            "aiq.auth.transport": "bearer",
+            "aiq.auth.verified": "true",
+            "aiq.access.channel": "api",
+        }
+
+    @pytest.mark.asyncio
+    async def test_missing_secret_does_not_tag_verified_user(self, capture_asgi):
+        app, _state = capture_asgi
+        span_tags: dict[str, str] = {}
+
+        class FakeSpan:
+            def set_tag(self, key: str, value: str) -> None:
+                span_tags[key] = value
+
+        ddtrace_module = types.ModuleType("ddtrace")
+        ddtrace_module.tracer = types.SimpleNamespace(current_span=lambda: FakeSpan())
+
+        mock_v = MagicMock()
+        mock_v.can_handle.return_value = True
+        mock_v.validate = AsyncMock(return_value={"type": "oidc", "sub": "user-123", "token": "good"})
+
+        async def send(msg):
+            pass
+
+        scope = _http_scope(
+            "/chat",
+            extra_headers=[(b"authorization", b"Bearer eyJhbGciOiJIUzI1NiJ9.x.y")],
+        )
+        with (
+            patch.dict(
+                os.environ,
+                {"AIQ_TRACE_USER_IDENTITY_MODE": "id", "AIQ_TRACE_USER_IDENTITY_HMAC_SECRET": ""},
+                clear=False,
+            ),
+            patch.dict(sys.modules, {"ddtrace": ddtrace_module}, clear=False),
+        ):
+            mw = AuthMiddleware(app, validators=[mock_v], require_auth=True, external_hostnames=set())
+            await mw(scope, AsyncMock(), send)
+
+        assert span_tags == {
+            "aiq.caller.type": "oidc",
+            "aiq.auth.transport": "bearer",
+            "aiq.auth.verified": "true",
+            "aiq.access.channel": "api",
+        }
+
+    @pytest.mark.asyncio
+    async def test_explicit_access_channel_override_wins(self, capture_asgi):
+        app, _state = capture_asgi
+        span_tags: dict[str, str] = {}
+
+        class FakeSpan:
+            def set_tag(self, key: str, value: str) -> None:
+                span_tags[key] = value
+
+        ddtrace_module = types.ModuleType("ddtrace")
+        ddtrace_module.tracer = types.SimpleNamespace(current_span=lambda: FakeSpan())
+
+        mock_v = MagicMock()
+        mock_v.can_handle.return_value = True
+        mock_v.validate = AsyncMock(return_value={"type": "oidc", "sub": "user-123", "token": "good"})
+
+        async def send(msg):
+            pass
+
+        scope = _http_scope(
+            "/chat",
+            extra_headers=[
+                (b"authorization", b"Bearer eyJhbGciOiJIUzI1NiJ9.x.y"),
+                (b"x-aiq-access-channel", b"headless"),
+                (b"x-aiq-mode", b"headless"),
+            ],
+        )
+        with (
+            patch.dict(
+                os.environ,
+                {"AIQ_TRACE_USER_IDENTITY_MODE": "none", "AIQ_TRACE_CLIENT_ID_MODE": "none"},
+                clear=False,
+            ),
+            patch.dict(sys.modules, {"ddtrace": ddtrace_module}, clear=False),
+        ):
+            mw = AuthMiddleware(app, validators=[mock_v], require_auth=True, external_hostnames=set())
+            await mw(scope, AsyncMock(), send)
+
+        assert span_tags["aiq.access.channel"] == "headless"
+
+    @pytest.mark.asyncio
+    async def test_explicit_access_channel_ignored_for_external_anonymous_request(self, capture_asgi, external_host):
+        app, _state = capture_asgi
+        span_tags: dict[str, str] = {}
+
+        class FakeSpan:
+            def set_tag(self, key: str, value: str) -> None:
+                span_tags[key] = value
+
+        ddtrace_module = types.ModuleType("ddtrace")
+        ddtrace_module.tracer = types.SimpleNamespace(current_span=lambda: FakeSpan())
+
+        async def send(msg):
+            pass
+
+        scope = _http_scope(
+            "/health",
+            host=external_host,
+            extra_headers=[(b"x-aiq-access-channel", b"internal")],
+        )
+        with (
+            patch.dict(
+                os.environ,
+                {"AIQ_TRACE_USER_IDENTITY_MODE": "none", "AIQ_TRACE_CLIENT_ID_MODE": "none"},
+                clear=False,
+            ),
+            patch.dict(sys.modules, {"ddtrace": ddtrace_module}, clear=False),
+        ):
+            mw = AuthMiddleware(app, validators=[], require_auth=False, external_hostnames={external_host.decode()})
+            await mw(scope, AsyncMock(), send)
+
+        assert span_tags["aiq.access.channel"] == "anonymous"
+
+    @pytest.mark.asyncio
+    async def test_client_ip_mode_adds_pseudonymous_client_id(self, capture_asgi):
+        app, _state = capture_asgi
+        span_tags: dict[str, str] = {}
+
+        class FakeSpan:
+            def set_tag(self, key: str, value: str) -> None:
+                span_tags[key] = value
+
+        ddtrace_module = types.ModuleType("ddtrace")
+        ddtrace_module.tracer = types.SimpleNamespace(current_span=lambda: FakeSpan())
+
+        mock_v = MagicMock()
+        mock_v.can_handle.return_value = True
+        mock_v.validate = AsyncMock(return_value={"type": "anonymous", "skip_clarifier": True})
+
+        async def send(msg):
+            pass
+
+        scope = _http_scope(
+            "/health",
+            host=b"api.public.example",
+            extra_headers=[(b"x-forwarded-for", b"203.0.113.10, 10.0.0.1")],
+        )
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "AIQ_TRACE_USER_IDENTITY_MODE": "none",
+                    "AIQ_TRACE_CLIENT_ID_MODE": "ip",
+                    "AIQ_TRACE_CLIENT_ID_HMAC_SECRET": "client-secret",  # pragma: allowlist secret
+                },
+                clear=False,
+            ),
+            patch.dict(sys.modules, {"ddtrace": ddtrace_module}, clear=False),
+        ):
+            mw = AuthMiddleware(app, validators=[mock_v], require_auth=False, external_hostnames={"api.public.example"})
+            await mw(scope, AsyncMock(), send)
+
+        expected_client_id = middleware_module._build_pseudonymous_trace_client_id("203.0.113.10", "client-secret")
+        assert span_tags == {
+            "aiq.caller.type": "anonymous",
+            "aiq.auth.transport": "none",
+            "aiq.auth.verified": "false",
+            "aiq.access.channel": "anonymous",
+            "aiq.client.id": expected_client_id,
+        }
+
+    @pytest.mark.asyncio
+    async def test_unverified_internal_token_does_not_tag_active_span(self, capture_asgi):
+        app, _state = capture_asgi
+        span_tags: dict[str, str] = {}
+
+        class FakeSpan:
+            def set_tag(self, key: str, value: str) -> None:
+                span_tags[key] = value
+
+        ddtrace_module = types.ModuleType("ddtrace")
+        ddtrace_module.tracer = types.SimpleNamespace(current_span=lambda: FakeSpan())
+
+        mock_v = MagicMock()
+        mock_v.can_handle.return_value = True
+        mock_v.validate = AsyncMock(return_value=None)
+
+        async def send(msg):
+            pass
+
+        scope = _http_scope(
+            "/chat",
+            extra_headers=[(b"authorization", b"Bearer badtoken")],
+        )
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "AIQ_TRACE_USER_IDENTITY_MODE": "full",
+                    "AIQ_TRACE_USER_IDENTITY_HMAC_SECRET": "test-secret",  # pragma: allowlist secret
+                },
+                clear=False,
+            ),
+            patch.dict(sys.modules, {"ddtrace": ddtrace_module}, clear=False),
+        ):
+            mw = AuthMiddleware(app, validators=[mock_v], require_auth=False, external_hostnames=set())
+            await mw(scope, AsyncMock(), send)
+
+        assert span_tags == {
+            "aiq.caller.type": "unverified_jwt",
+            "aiq.auth.transport": "bearer",
+            "aiq.auth.verified": "false",
+            "aiq.access.channel": "api",
+        }
 
 
 class TestAuthMiddlewareHelpers:
@@ -522,3 +958,147 @@ class TestAuthPackageExports:
 
         for name in auth_pkg.__all__:
             assert getattr(auth_pkg, name) is not None
+
+
+# ---------------------------------------------------------------------------
+# Error subclasses
+# ---------------------------------------------------------------------------
+
+
+class TestAuthErrorSubclasses:
+    def test_token_expired_is_auth_error(self) -> None:
+        assert issubclass(TokenExpiredError, AuthError)
+        assert TokenExpiredError.error_code == "token_expired"
+
+    def test_token_invalid_is_auth_error(self) -> None:
+        assert issubclass(TokenInvalidError, AuthError)
+        assert TokenInvalidError.error_code == "token_invalid"
+
+    def test_base_auth_error_code(self) -> None:
+        assert AuthError.error_code == "auth_error"
+
+
+# ---------------------------------------------------------------------------
+# validate() error codes (JWTValidator)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateErrorCodes:
+    @pytest.mark.asyncio
+    async def test_jwt_validator_expired_returns_token_expired(self) -> None:
+        priv = _rsa_private_key()
+        jwk = _signing_jwk_from_private(priv)
+        issuer = "https://issuer.example"
+        now = datetime.now(UTC)
+        claims = {
+            "sub": "user-1",
+            "iss": issuer,
+            "exp": now - timedelta(hours=1),
+            "iat": now - timedelta(hours=2),
+        }
+        token = jwt.encode(claims, priv, algorithm="RS256")
+
+        validator = JWTValidator(issuer, jwks_uri="https://unused/jwks")
+        with patch.object(validator, "_get_signing_key", return_value=jwk):
+            user, error = await validator.validate(token)
+
+        assert user is None
+        assert error == "token_expired"
+
+    @pytest.mark.asyncio
+    async def test_jwt_validator_invalid_sig_returns_token_invalid(self) -> None:
+        priv = _rsa_private_key()
+        other_priv = _rsa_private_key()
+        jwk = _signing_jwk_from_private(other_priv)  # wrong key
+        issuer = "https://issuer.example"
+        now = datetime.now(UTC)
+        claims = {
+            "sub": "user-1",
+            "iss": issuer,
+            "exp": now + timedelta(hours=1),
+            "iat": now,
+        }
+        token = jwt.encode(claims, priv, algorithm="RS256")
+
+        validator = JWTValidator(issuer, jwks_uri="https://unused/jwks")
+        with patch.object(validator, "_get_signing_key", return_value=jwk):
+            user, error = await validator.validate(token)
+
+        assert user is None
+        assert error == "token_invalid"
+
+    @pytest.mark.asyncio
+    async def test_jwt_validator_success_returns_user_and_no_error(self) -> None:
+        priv = _rsa_private_key()
+        jwk = _signing_jwk_from_private(priv)
+        issuer = "https://issuer.example"
+        now = datetime.now(UTC)
+        claims = {
+            "sub": "user-1",
+            "iss": issuer,
+            "aud": "my-api",
+            "exp": now + timedelta(hours=1),
+            "iat": now,
+        }
+        token = jwt.encode(claims, priv, algorithm="RS256", headers={"kid": "k1"})
+
+        validator = JWTValidator(issuer, audience="my-api", jwks_uri="https://unused/jwks")
+        with patch.object(validator, "_get_signing_key", return_value=jwk):
+            user, error = await validator.validate(token)
+
+        assert user is not None
+        assert user["sub"] == "user-1"
+        assert user["type"] == "jwt"
+        assert error is None
+
+
+# ---------------------------------------------------------------------------
+# Middleware error code propagation
+# ---------------------------------------------------------------------------
+
+
+class TestMiddlewareErrorCodes:
+    @pytest.mark.asyncio
+    async def test_missing_token_returns_token_missing(self, capture_asgi, external_host):
+        app, _ = capture_asgi
+        mw = AuthMiddleware(app, validators=[], require_auth=True, external_hostnames={external_host.decode()})
+        messages: list[dict] = []
+
+        async def send(msg):
+            messages.append(msg)
+
+        scope = _http_scope("/chat", host=external_host)
+        await mw(scope, AsyncMock(), send)
+
+        body = json.loads(messages[1]["body"].decode())
+        assert body["error"] == "token_missing"
+        assert messages[0]["status"] == 401
+
+    @pytest.mark.asyncio
+    async def test_expired_token_returns_token_expired(self, capture_asgi, external_host):
+        app, _ = capture_asgi
+        mock_v = MagicMock()
+        mock_v.can_handle.return_value = True
+        mock_v.validate = AsyncMock(return_value=(None, "token_expired"))
+        mw = AuthMiddleware(
+            app,
+            validators=[mock_v],
+            require_auth=True,
+            external_hostnames={external_host.decode()},
+        )
+        messages: list[dict] = []
+
+        async def send(msg):
+            messages.append(msg)
+
+        scope = _http_scope(
+            "/chat",
+            host=external_host,
+            extra_headers=[(b"authorization", b"Bearer expired.token.here")],
+        )
+        await mw(scope, AsyncMock(), send)
+
+        body = json.loads(messages[1]["body"].decode())
+        assert body["error"] == "token_expired"
+        assert body["detail"] == "Token has expired"
+        assert messages[0]["status"] == 401
