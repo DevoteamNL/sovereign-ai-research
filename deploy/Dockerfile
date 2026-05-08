@@ -102,7 +102,7 @@ RUN /app/.venv/bin/python -c "import aiq_api; import aiq_research_cli; import ai
 # =============================================================================
 # Stage 3: Development runtime
 # =============================================================================
-FROM nvcr.io/nvidia/distroless/python:3.12-v3.5.3 AS dev
+FROM nvcr.io/nvidia/distroless/python:3.12-v4.0.4 AS dev
 
 WORKDIR /app
 
@@ -121,7 +121,7 @@ ENTRYPOINT ["python", "/app/deploy/entrypoint.py"]
 # =============================================================================
 # Stage 4: Release (production - no CLI)
 # =============================================================================
-FROM nvcr.io/nvidia/distroless/python:3.12-v3.5.3 AS release
+FROM nvcr.io/nvidia/distroless/python:3.12-v4.0.4 AS release
 
 WORKDIR /app
 
