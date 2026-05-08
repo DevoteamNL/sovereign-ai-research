@@ -73,10 +73,10 @@ def get_auth_token() -> str | None:
     Returns:
         ID token string or None if not available.
     """
-    from nat.builder.context import AIQContext
+    from nat.builder.context import Context
 
     try:
-        context_metadata = AIQContext.get().metadata
+        context_metadata = Context.get().metadata
 
         if context_metadata and context_metadata.cookies:
             id_token = context_metadata.cookies.get("idToken")
