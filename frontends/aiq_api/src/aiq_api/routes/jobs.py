@@ -173,7 +173,7 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
     import logging as std_logging
     import os
 
-    from nat.front_ends.fastapi.job_store import JobStatus
+    from nat.front_ends.fastapi.async_jobs.job_store import JobStatus
 
     from ..jobs import EventStore
     from ..jobs.runner import run_agent_job
@@ -573,7 +573,7 @@ async def _reap_ghost_jobs(job_store, db_url: str) -> None:
     GHOST_JOB_TIMEOUT_SECONDS with no new events in the job_events table.
     This catches Dask worker crashes and OOM kills that bypass Python exception handling.
     """
-    from nat.front_ends.fastapi.job_store import JobStatus
+    from nat.front_ends.fastapi.async_jobs.job_store import JobStatus
 
     from ..jobs import EventStore
 
@@ -1033,7 +1033,7 @@ async def _sse_generator_postgres(job_store, job_id: str, db_url: str, start_eve
 
     import asyncpg
 
-    from nat.front_ends.fastapi.job_store import JobStatus
+    from nat.front_ends.fastapi.async_jobs.job_store import JobStatus
 
     from ..jobs import EventStore
     from ..jobs import get_connection_manager
@@ -1205,7 +1205,7 @@ async def _sse_generator_polling(job_store, job_id: str, db_url: str, start_even
     """
     import asyncio
 
-    from nat.front_ends.fastapi.job_store import JobStatus
+    from nat.front_ends.fastapi.async_jobs.job_store import JobStatus
 
     from ..jobs import EventStore
     from ..jobs import get_connection_manager

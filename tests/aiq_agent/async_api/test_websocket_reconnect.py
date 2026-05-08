@@ -37,6 +37,8 @@ from nat.data_models.api_server import WebSocketMessageType
 from nat.data_models.api_server import WebSocketUserInteractionResponseMessage
 from nat.data_models.api_server import WebSocketUserMessage
 from nat.data_models.api_server import WorkflowSchemaType
+from nat.data_models.interactive import HumanPromptText
+from nat.front_ends.fastapi.message_handler import UserInteraction
 
 
 class DummySocket:
@@ -77,6 +79,14 @@ class DummySessionManager:
 
 class DummyStepAdaptor:
     """Minimal step adaptor stub."""
+
+
+class DummyWorker:
+    """Minimal FastApiFrontEndPluginWorker stub (NAT 1.6 added worker as a
+    required positional arg on WebSocketMessageHandler.__init__)."""
+
+    def set_conversation_handler(self, _conversation_id, _handler) -> None:
+        return None
 
 
 class DummyMessage(BaseModel):
@@ -159,6 +169,7 @@ async def test_handler_create_websocket_message_uses_registry_send(
         socket=dummy_socket,
         session_manager=DummySessionManager(),
         step_adaptor=DummyStepAdaptor(),
+        worker=DummyWorker(),
     )
     handler._conversation_id = "conv-1"
 
@@ -222,6 +233,7 @@ async def test_handler_create_websocket_message_drops_for_disconnected_conversat
         socket=dummy_socket,
         session_manager=DummySessionManager(),
         step_adaptor=DummyStepAdaptor(),
+        worker=DummyWorker(),
     )
     handler._conversation_id = "conv-1"
 
@@ -280,6 +292,7 @@ async def test_handler_create_websocket_message_falls_back_to_socket_without_con
         socket=dummy_socket,
         session_manager=DummySessionManager(),
         step_adaptor=DummyStepAdaptor(),
+        worker=DummyWorker(),
     )
     handler._conversation_id = None
 
@@ -337,6 +350,7 @@ async def test_handler_create_websocket_message_handles_socket_failure(
         socket=dummy_socket,
         session_manager=DummySessionManager(),
         step_adaptor=DummyStepAdaptor(),
+        worker=DummyWorker(),
     )
     handler._conversation_id = "conv-1"
 
@@ -391,6 +405,7 @@ async def test_handler_run_resolves_pending_future(monkeypatch) -> None:
         socket=dummy_socket,
         session_manager=DummySessionManager(),
         step_adaptor=DummyStepAdaptor(),
+        worker=DummyWorker(),
     )
     handler._conversation_id = "conv-1"
 
@@ -412,7 +427,11 @@ async def test_handler_run_resolves_pending_future(monkeypatch) -> None:
     )
 
     future: asyncio.Future[TextContent] = asyncio.get_running_loop().create_future()
-    handler._user_interaction_response = future
+    handler._user_interaction = UserInteraction(
+        future=future,
+        prompt_content=HumanPromptText(text="prompt", placeholder="", required=True),
+        started_at=0.0,
+    )
 
     async def fake_validate_message(_message):
         return response_message
@@ -445,6 +464,7 @@ async def test_handler_run_uses_registry_when_no_future(
         socket=dummy_socket,
         session_manager=DummySessionManager(),
         step_adaptor=DummyStepAdaptor(),
+        worker=DummyWorker(),
     )
     handler._conversation_id = "conv-1"
 
@@ -500,6 +520,7 @@ async def test_handler_run_processes_user_message(monkeypatch) -> None:
         socket=dummy_socket,
         session_manager=DummySessionManager(),
         step_adaptor=DummyStepAdaptor(),
+        worker=DummyWorker(),
     )
 
     content = UserMessageContent(
@@ -547,6 +568,7 @@ async def test_handler_run_cancels_workflow_on_disconnect(monkeypatch) -> None:
         socket=dummy_socket,
         session_manager=DummySessionManager(),
         step_adaptor=DummyStepAdaptor(),
+        worker=DummyWorker(),
     )
     handler._conversation_id = "conv-1"
 
