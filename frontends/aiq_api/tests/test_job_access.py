@@ -100,6 +100,12 @@ class TestJobAccessStorage:
 
 
 class TestAuthorizeJobAccess:
+    @pytest.fixture(autouse=True)
+    def require_auth_enabled(self, monkeypatch):
+        # `authorize_job_access` only enforces ownership when REQUIRE_AUTH=true.
+        # Upstream's tests assume this env var is set; fixture makes it explicit.
+        monkeypatch.setenv("REQUIRE_AUTH", "true")
+
     def test_owner_can_access_job(self, db_url):
         _insert_job_info(db_url, "job-1")
         principal = Principal(type="jwt", sub="user-1")
