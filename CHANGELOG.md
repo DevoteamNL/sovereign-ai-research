@@ -1,5 +1,20 @@
 # Change Log
 
+Release v2.1.0 (Unreleased — target 2026-05-19)
+
+- AI-Q REST API with pluggable auth middleware, entry-point-registered token validators, and async job ownership enforcement
+- Auth extensibility hooks (`register_token_fetcher`, provider lifecycle) and auth refactor eliminating the refresh race
+- Data source registry driving UI toggles, per-message filtering, and agent tool inheritance
+- New `exa_web_search` data source with `full_text` and `highlights` controls
+- Deep researcher consumes DeepAgents skills with a job-scoped Modal sandbox; built-in `data-table-analysis` skill and `configs/config_skills.yml` example
+- AI-Q is consumable as a Claude Code skill (`.claude/skills/aiq-research/`) for routed `/chat` and async job lifecycle against a local AI-Q server
+- Cost analysis tool with pricing configs and profiling example
+- Documented MCP client patterns scoped for 2.1: `mcp_client`, `mcp_service_account`, and user-identity tools
+- Prompt restructure across all agents for KV cache prefix reuse
+- Operability: idempotent DB init, tuned Dask/Postgres defaults, request tracing into NAT spans, UI stream-failure hardening
+- New authentication and MCP tools guides; new skills-and-sandbox example
+- Pinned to NeMo Agent Toolkit (NAT) v1.6.0; CVE bumps for Pillow, cryptography, pygments, authlib, pyopenssl, and pytest
+
 Migration (2026-04-20)
 
 - Project home moved to [`rh-ai-quickstart/rh-research`](https://github.com/rh-ai-quickstart/rh-research); see `MIGRATION.md` for history layout, upstream tracking, and attribution
