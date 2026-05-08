@@ -13,26 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared authentication utilities for AI-Q blueprint.
+"""Auth-related exception types."""
 
-This module provides token retrieval and user info utilities that can be used
-by any tool or agent.
-"""
 
-from .utils import UserInfo
-from .utils import clear_token_fetchers
-from .utils import decode_jwt_payload
-from .utils import get_auth_token
-from .utils import get_current_user_info
-from .utils import get_user_info_from_token
-from .utils import register_token_fetcher
+class AuthError(Exception):
+    """Raised when a request fails due to authentication or authorization issues.
 
-__all__ = [
-    "UserInfo",
-    "clear_token_fetchers",
-    "decode_jwt_payload",
-    "get_auth_token",
-    "get_current_user_info",
-    "get_user_info_from_token",
-    "register_token_fetcher",
-]
+    Agent nodes catch this before the generic Exception handler and return
+    str(e) directly to the user. Subclass this for specific auth failure modes
+    (e.g. missing token, expired token, insufficient permissions) to ensure
+    actionable error messages reach the caller rather than a generic fallback.
+    """

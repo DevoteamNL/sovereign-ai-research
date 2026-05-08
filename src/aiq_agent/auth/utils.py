@@ -16,16 +16,61 @@
 """Shared authentication utilities for token retrieval and user info.
 
 These utilities can be used by any tool or agent to get auth tokens or user info.
-Token source: AIQContext cookies (idToken) - set by the frontend auth layer.
+
+Token sources checked in priority order by ``get_auth_token()``:
+
+1. **Registered token fetchers** — extension hook (see ``register_token_fetcher``)
+   tried highest-priority first.
+2. **NAT/AIQ Context cookies** — ``idToken`` cookie set by the frontend auth layer
+   (server / web-UI mode).
+3. **NAT/AIQ Context Authorization header** — ``Authorization: Bearer <jwt>`` sent
+   by API callers who authenticate with a JWT directly.
 """
 
 import base64
 import json
 import logging
+import threading
+from collections.abc import Callable
 
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+_token_fetchers: list[tuple[int, Callable[[], str | None]]] = []
+_fetcher_lock = threading.Lock()
+
+
+def register_token_fetcher(fetcher: Callable[[], str | None], priority: int = 0) -> None:
+    """Register an additional token source.
+
+    Registered fetchers are tried in priority order (highest first) before
+    the default Context cookie lookup. The first fetcher that returns a
+    non-None token wins.
+
+    Duplicate fetchers (same callable identity) are silently ignored.
+
+    Args:
+        fetcher: Callable that returns a token string or None.
+        priority: Higher priority fetchers are tried first. Default: 0.
+    """
+    with _fetcher_lock:
+        if any(f is fetcher for _, f in _token_fetchers):
+            logger.debug("Token fetcher already registered, skipping duplicate")
+            return
+        _token_fetchers.append((priority, fetcher))
+        _token_fetchers.sort(key=lambda x: x[0], reverse=True)
+    logger.debug("Registered token fetcher (priority=%d), total fetchers: %d", priority, len(_token_fetchers))
+
+
+def clear_token_fetchers() -> None:
+    """Remove all registered token fetchers.
+
+    Warning: This is intended for test isolation only. Calling in production
+    will silently remove all registered auth sources.
+    """
+    with _fetcher_lock:
+        _token_fetchers.clear()
 
 
 class UserInfo(BaseModel):
@@ -66,38 +111,61 @@ def get_user_info_from_token(id_token: str) -> UserInfo:
 
 def get_auth_token() -> str | None:
     """
-    Get authentication token from the request context.
+    Return a token from the first available source.
 
-    Reads the idToken cookie set by the frontend auth layer.
+    Sources checked in order:
+
+    Tries registered token fetchers in priority order (highest first),
+    then falls back to the idToken cookie set by the frontend auth layer.
+    1. NAT ``Context`` cookies — ``idToken`` key (server / web-UI mode).
+    2. NAT ``Context`` Authorization header — ``Bearer <jwt>`` (API callers with JWT).
 
     Returns:
-        ID token string or None if not available.
+        ID token string, or ``None`` if no valid token is available.
     """
-    from nat.builder.context import Context
+    # Try registered fetchers first (highest priority first).
+    # Iterate a snapshot so concurrent register_token_fetcher() calls
+    # don't mutate the list mid-iteration.
+    for _priority, fetcher in list(_token_fetchers):
+        try:
+            token = fetcher()
+            if token:
+                logger.debug("Token provided by registered fetcher")
+                return token
+        except Exception as e:
+            logger.debug("Registered token fetcher failed: %s", e)
 
+    # Default: Context cookies
     try:
+        from nat.builder.context import Context
+
         context_metadata = Context.get().metadata
 
+        # 1. NAT Context cookie (browser / web-UI mode)
         if context_metadata and context_metadata.cookies:
             id_token = context_metadata.cookies.get("idToken")
             if id_token:
-                token = id_token.strip()
-                logger.debug("Using token from AIQContext cookies")
-                return token
+                logger.debug("Using token from Context cookies")
+                return id_token.strip()
+
+        # 2. NAT Context Authorization header (API callers with JWT)
+        if context_metadata and context_metadata.headers:
+            auth_header = context_metadata.headers.get("authorization", "")
+            if auth_header.startswith("Bearer eyJ"):
+                logger.debug("Using token from Authorization header")
+                return auth_header[7:].strip()
     except Exception as e:
-        logger.debug("Failed to retrieve token from AIQContext: %s", e)
+        logger.debug("Failed to retrieve token from Context: %s", e)
 
     return None
 
 
 def get_current_user_info() -> UserInfo | None:
     """
-    Get current user information from the frontend auth token.
-
-    Reads the idToken cookie from AIQContext (set by the frontend).
+    Get current user information from the first available token source.
 
     Returns:
-        UserInfo object or None if no token available.
+        ``UserInfo`` with email / name, or ``None`` if no token is available.
     """
     token = get_auth_token()
 
