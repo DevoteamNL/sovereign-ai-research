@@ -57,6 +57,19 @@ class DeepResearchAgentConfig(FunctionBaseConfig, name="deep_research_agent"):
 async def deep_research_agent(config: DeepResearchAgentConfig, builder: Builder):
     """Deep research agent using multi-phase workflow."""
     tools = await builder.get_tools(tool_names=config.tools, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
+
+    from aiq_agent.common import validate_tool_availability
+
+    is_valid, available_count, unavailable = validate_tool_availability(
+        tools,
+        research_type="deep research",
+    )
+    if not is_valid:
+        logger.warning(
+            "Startup check: no tools available for deep research. "
+            "All queries will fail until at least one tool is properly configured.",
+        )
+
     llm = await builder.get_llm(config.orchestrator_llm, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
 
     provider = LLMProvider()
@@ -102,14 +115,14 @@ async def deep_research_agent(config: DeepResearchAgentConfig, builder: Builder)
             # At least one tool must be available
             # This prevents the agent from trying to reason about unavailable tools
             # Check selected_tools directly - they already reflect data_sources filtering
-            from aiq_agent.common import format_tool_unavailability_error
+            from aiq_agent.common import format_user_facing_tool_error
             from aiq_agent.common import validate_tool_availability
 
             is_valid, _, unavailable_tools = validate_tool_availability(selected_tools, research_type="deep research")
 
             # Fail if no tools are available
             if not is_valid:
-                error_msg = format_tool_unavailability_error("deep research", unavailable_tools)
+                error_msg = format_user_facing_tool_error("deep research", unavailable_tools)
 
                 # Return error state with error message - this prevents the agent from running
                 from langchain_core.messages import AIMessage
@@ -143,12 +156,13 @@ class DeepResearchWorkflowConfig(FunctionBaseConfig, name="deep_research_workflo
 async def deep_research_workflow(config: DeepResearchWorkflowConfig, builder: Builder):
     """Wrapper workflow that accepts string queries for evaluation."""
     deep_research_agent_fn = await builder.get_function("deep_research_agent")
+    workflow_id = config.name or config.type
 
     async def _run(query: str) -> ChatResponse:
         """Run deep research on a query string."""
         state = DeepResearchAgentState(messages=[HumanMessage(content=query)])
         result = await deep_research_agent_fn.ainvoke(state)
         response_content = result.messages[-1].content
-        return _create_chat_response(response_content, response_id="research_response")
+        return _create_chat_response(response_content, response_id="research_response", model=workflow_id)
 
     yield FunctionInfo.from_fn(_run, description="Deep research workflow for evaluation (accepts string query).")

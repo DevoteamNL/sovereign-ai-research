@@ -57,6 +57,18 @@ async def shallow_research_agent(config: ShallowResearchAgentConfig, builder: Bu
     llm = await builder.get_llm(config.llm, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
     tools = await builder.get_tools(tool_names=config.tools, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
 
+    from aiq_agent.common import validate_tool_availability
+
+    is_valid, available_count, unavailable = validate_tool_availability(
+        tools,
+        research_type="shallow research",
+    )
+    if not is_valid:
+        logger.warning(
+            "Startup check: no tools available for shallow research. "
+            "All queries will fail until at least one tool is properly configured.",
+        )
+
     provider = LLMProvider()
     provider.set_default(llm)
 
@@ -91,7 +103,7 @@ async def shallow_research_agent(config: ShallowResearchAgentConfig, builder: Bu
             # At least one tool must be available
             # This prevents the agent from trying to reason about unavailable tools
             # Check selected_tools directly - they already reflect data_sources filtering
-            from aiq_agent.common import format_tool_unavailability_error
+            from aiq_agent.common import format_user_facing_tool_error
             from aiq_agent.common import validate_tool_availability
 
             is_valid, _, unavailable_tools = validate_tool_availability(
@@ -100,7 +112,7 @@ async def shallow_research_agent(config: ShallowResearchAgentConfig, builder: Bu
 
             # Fail if no tools are available
             if not is_valid:
-                error_msg = format_tool_unavailability_error("shallow research", unavailable_tools)
+                error_msg = format_user_facing_tool_error("shallow research", unavailable_tools)
 
                 # Return error state with error message - this prevents the agent from running
                 from langchain_core.messages import AIMessage
@@ -134,6 +146,7 @@ class ShallowResearchWorkflowConfig(FunctionBaseConfig, name="shallow_research_w
 async def shallow_research_workflow(config: ShallowResearchWorkflowConfig, builder: Builder):
     """Wrapper workflow that accepts string queries for evaluation."""
     shallow_research_agent_fn = await builder.get_function("shallow_research_agent")
+    workflow_id = config.name or config.type
 
     async def _run(query: str) -> ChatResponse:
         """Run shallow research on a query string."""
@@ -141,6 +154,6 @@ async def shallow_research_workflow(config: ShallowResearchWorkflowConfig, build
             ShallowResearchAgentState(messages=[HumanMessage(content=query)])
         )
         response_content = result.messages[-1].content
-        return _create_chat_response(response_content, response_id="research_response")
+        return _create_chat_response(response_content, response_id="research_response", model=workflow_id)
 
     yield FunctionInfo.from_fn(_run, description="Shallow research workflow for evaluation (accepts string query).")

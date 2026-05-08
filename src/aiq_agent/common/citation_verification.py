@@ -81,6 +81,10 @@ class EmptySourceRegistryError(Exception):
         tool_errors: List of error messages from failed tool calls, if any. When
             populated, indicates tools were invoked but returned errors (e.g., API
             quota exhausted) rather than the model ignoring tools entirely.
+        unavailable_tools: List of tool names registered as stubs because their
+            pre-flight checks failed (e.g., missing API keys). Surfaced upstream by
+            #184 for actionable configuration guidance.
+        available_count: Number of tools that passed pre-flight and could have run.
     """
 
     def __init__(
@@ -89,10 +93,14 @@ class EmptySourceRegistryError(Exception):
         *,
         had_model_response: bool = False,
         tool_errors: list[str] | None = None,
+        unavailable_tools: list[str] | None = None,
+        available_count: int = 0,
     ) -> None:
         self.agent_type = agent_type
         self.had_model_response = had_model_response
         self.tool_errors = tool_errors or []
+        self.unavailable_tools = unavailable_tools or []
+        self.available_count = available_count
         if self.tool_errors:
             detail = f"Research tools failed during {agent_type}: " + "; ".join(self.tool_errors)
         elif had_model_response:
@@ -458,8 +466,20 @@ def extract_sources_from_tool_result(tool_name: str, content: str) -> list[Sourc
 # Built-in parsers
 # ---------------------------------------------------------------------------
 
-# Generic URL extractor — works for any tool output format
-_GENERIC_URL_RE = re.compile(r"https?://[^\s<>\"',\]]+")
+# Generic URL extractor — works for any tool output format.
+# Commas are valid URL path characters (RFC 3986 sub-delim) and appear in real
+# URLs like https://weathercams.faa.gov/map/-122.31167,47.22287,10/...; we
+# include them in the match and rely on _URL_TRIM_CHARS below to strip any
+# comma that's actually sentence punctuation. ``]`` stays excluded here
+# because it almost always terminates a markdown link rather than appearing
+# in a path.
+_GENERIC_URL_RE = re.compile(r"https?://[^\s<>\"'\]]+")
+
+# Trailing characters to strip from a captured URL.  Covers sentence
+# punctuation and the closing chars of common Markdown wrappers — ``]`` for
+# ``[https://...]`` and ``>`` for ``<https://...>``.  Used at every site that
+# captures a URL via a permissive regex (registration and verification).
+_URL_TRIM_CHARS = ".,;)]>"
 
 
 # Patterns for extracting titles near URLs in common tool output formats
@@ -519,7 +539,7 @@ def _parse_generic_urls(content: str, tool_name: str) -> list[SourceEntry]:
     seen: set[str] = set()
     entries: list[SourceEntry] = []
     for match in _GENERIC_URL_RE.finditer(content):
-        url = unescape(match.group(0)).rstrip(".,;)")
+        url = unescape(match.group(0)).rstrip(_URL_TRIM_CHARS)
         normalized = _normalize_url(url)
         if normalized not in seen:
             seen.add(normalized)
@@ -703,7 +723,7 @@ def verify_citations(report_text: str, registry: SourceRegistry) -> CitationVeri
         # Try URL match first
         url_match = _URL_IN_LINE_RE.search(ref_text)
         if url_match:
-            url = url_match.group(0).rstrip(".,;)")
+            url = url_match.group(0).rstrip(_URL_TRIM_CHARS)
             canonical = registry.resolve_url(url)
             if canonical:
                 if canonical != url:
@@ -810,11 +830,13 @@ _TRUNCATED_URL_RE = re.compile(r"\.\.\.$|…$")  # ends in ... or ellipsis
 # Suspicious URL patterns
 _IP_ADDRESS_RE = re.compile(r"^https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}")
 _SUSPICIOUS_SCHEMES_RE = re.compile(r"^(?:javascript|data|vbscript|file):", re.IGNORECASE)
-_BARE_URL_RE = re.compile(r"https?://[^\s<>\"',\]]+")
+# See _GENERIC_URL_RE for the rationale on why ``,`` is matched and stripped
+# via _URL_TRIM_CHARS rather than excluded in the character class.
+_BARE_URL_RE = re.compile(r"https?://[^\s<>\"'\]]+")
 
 # Body URL patterns (used by sanitize_report)
 _MD_LINK_RE = re.compile(r"\[([^\]]*)\]\(\s*\w+://[^\s)]+\)")
-_BODY_URL_RE = re.compile(r"\w+://[^\s<>\"',\]]+")
+_BODY_URL_RE = re.compile(r"\w+://[^\s<>\"'\]]+")
 
 
 @dataclass
@@ -871,11 +893,11 @@ def sanitize_report(report_text: str) -> ReportSanitizationResult:
             num = int(m.group(1))
             url_m = _BARE_URL_RE.search(m.group(2))
             if url_m:
-                url_to_citation[_normalize_url(url_m.group(0).rstrip(".,;)"))] = num
+                url_to_citation[_normalize_url(url_m.group(0).rstrip(_URL_TRIM_CHARS))] = num
 
     def _replace_body_url(match: re.Match) -> str:
         nonlocal body_urls_removed, body_urls_replaced
-        url = match.group(0).rstrip(".,;)")
+        url = match.group(0).rstrip(_URL_TRIM_CHARS)
         normalized = _normalize_url(url)
         if normalized in url_to_citation:
             body_urls_replaced += 1
@@ -905,7 +927,7 @@ def sanitize_report(report_text: str) -> ReportSanitizationResult:
             url_match = _BARE_URL_RE.search(line)
             if not url_match:
                 continue
-            url = url_match.group(0).rstrip(".,;)")
+            url = url_match.group(0).rstrip(_URL_TRIM_CHARS)
 
             # Check for non-http schemes embedded in text
             if _SUSPICIOUS_SCHEMES_RE.search(line):

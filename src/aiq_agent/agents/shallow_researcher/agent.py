@@ -321,10 +321,19 @@ class ShallowResearcherAgent:
                             if "error" in tool_content.lower():
                                 tool_errors.append(tool_content.strip())
 
+                    from aiq_agent.common.tool_validation import validate_tool_availability
+
+                    _, available_count, unavailable = validate_tool_availability(
+                        self.tools,
+                        research_type="shallow research",
+                        enable_logging=False,
+                    )
                     raise EmptySourceRegistryError(
                         "shallow research",
                         had_model_response=bool(content.strip()),
                         tool_errors=tool_errors,
+                        unavailable_tools=unavailable,
+                        available_count=available_count,
                     )
 
                 # Step 2: sanitize report (strip body URLs, shortened URLs, unsafe URLs)
