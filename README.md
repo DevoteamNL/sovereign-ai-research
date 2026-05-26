@@ -30,7 +30,7 @@ Built as a customized version of the NVIDIA AI-Q Blueprint for Red Hat AI, this 
 
 ### Architecture Diagrams
 
-![AI-Q Architecture on Red Hat AI](docs/assets/rhaifn-qs-light.png)
+![AI-Q Architecture on Red Hat AI](docs/images/rhaifn-qs-light.png)
 
 This architecture diagram shows a customized NVIDIA AI-Q research workflow running on Red Hat AI Factory with NVIDIA. AI-Q routes user requests across different research paths, from simple responses to shallow, tool-augmented research and deeper multi-step research with planning, sub-agents, and report generation.
 
