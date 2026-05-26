@@ -1,6 +1,6 @@
 # AI-Q Configuration Reference for OpenShift AI
 
-Quick reference for YAML configuration parameters used in the 4 deployment options. For quick configuration changes, see [CUSTOMIZATION.md](CUSTOMIZATION.md).
+Quick reference for YAML configuration parameters used in the 4 deployment options. For quick configuration changes, see [Customization Reference](customization-reference.md).
 
 ## Table of Contents
 
@@ -225,7 +225,7 @@ functions:
 
 ### Knowledge Retrieval
 
-Two backends supported: LlamaIndex (embedded) or RAG Blueprint (external).
+Two backends supported: LlamaIndex (embedded) or RAG AI quickstart based on NVIDIA RAG Blueprint (external).
 
 **LlamaIndex Backend (Options A & B):**
 
@@ -246,7 +246,7 @@ functions:
 | `top_k` | `int` | `5` | Number of results to return |
 | `chroma_dir` | `str` | `/tmp/chroma_data` | ChromaDB persistence directory |
 
-**RAG Blueprint Backend (Options C & D):**
+**RAG AI quickstart Backend (Options C & D):**
 
 ```yaml
 functions:
@@ -263,7 +263,7 @@ functions:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `backend` | `str` | **Required** | Use `foundational_rag` for RAG Blueprint |
+| `backend` | `str` | **Required** | Use `foundational_rag` for RAG AI quickstart (based on NVIDIA RAG Blueprint) |
 | `collection_name` | `str` | **Required** | Collection to search |
 | `top_k` | `int` | `5` | Number of results |
 | `rag_url` | `str` | **Required** | RAG server query endpoint (include `/v1`) |

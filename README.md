@@ -1,424 +1,403 @@
-<!--
-SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-SPDX-License-Identifier: Apache-2.0
+# Academic Research Assistant on Red Hat AI Factory with NVIDIA
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
--->
-<h1>NVIDIA AI-Q Blueprint</h1>
-
-> **📦 Project home**
->
-> Active development lives at [`rh-ai-quickstart/rh-research`](https://github.com/rh-ai-quickstart/rh-research) on the **`red-hat-v2.1.0`** branch. The repo's `develop` branch currently tracks NVIDIA upstream ([`NVIDIA-AI-Blueprints/aiq`](https://github.com/NVIDIA-AI-Blueprints/aiq)) while a separate upstream-merge effort integrates recent NVIDIA changes. See [`MIGRATION.md`](MIGRATION.md) for the layout and how to track either branch.
-
-> **🏆 BENCHMARK NOTE 🏆**
->
-> To obtain results consistent with the **nvidia-aiq** [DeepResearch Bench](https://huggingface.co/spaces/muset-ai/DeepResearch-Bench-Leaderboard) and [DeepResearch Bench II](https://agentresearchlab.com/benchmarks/deepresearch-bench-ii/index.html#leaderboard) leaderboard results, please use the [`drb1`](https://github.com/NVIDIA-AI-Blueprints/aiq/tree/drb1) and [`drb2`](https://github.com/NVIDIA-AI-Blueprints/aiq/tree/drb2) branches from the upstream repository, respectively.
-
+Build an academic research agent on Red Hat AI Factory with NVIDIA, powered by vLLM models and platform capabilities for observability, governance, and scale.
 
 ## Table of Contents
-- [Overview](#overview)
-- [Software Components](#software-components)
-- [Target Audience](#target-audience)
-- [Prerequisites](#prerequisites)
-- [Architecture](#architecture)
-- [Getting Started](#getting-started)
-  - [Clone the Repository](#clone-the-repository)
-  - [Automated Setup](#automated-setup)
-  - [Obtain API Keys](#obtain-api-keys)
-  - [Set Up Environment Variables](#set-up-environment-variables)
-- [Configuration Files](#configuration-files)
-- [Ways to Run the Agents](#ways-to-run-the-agents)
-  - [Command-line interface (CLI)](#command-line-interface-cli)
-  - [Web UI](#web-ui)
-  - [Async Deep Research Jobs](#async-deep-research-jobs)
-  - [Benchmarks](#benchmarks)
-  - [Jupyter Notebooks](#jupyter-notebooks)
-- [Evaluating the Workflow](#evaluating-the-workflow)
-  - [Available Benchmarks](#available-benchmarks)
-  - [Running Evaluations](#running-evaluations)
-- [Development](#development)
-- [Roadmap](#roadmap)
-- [Security Considerations](#security-considerations)
-- [License](#license)
 
-## Overview
+- [Detailed Description](#detailed-description)
+  - [See it in Action](#see-it-in-action)
+  - [Architecture Diagrams](#architecture-diagrams)
+  - [Container Images & Versioning](#container-images--versioning)
+- [Requirements](#requirements)
+  - [Minimum Hardware Requirements](#minimum-hardware-requirements)
+  - [Minimum Software Requirements](#minimum-software-requirements)
+  - [Required User Permissions](#required-user-permissions)
+- [Deploy](#deploy)
+  - [Prerequisites](#prerequisites)
+  - [Install](#install)
+  - [Delete](#delete)
+- [Customization](#customization)
+- [References](#references)
+- [Tags](#tags)
 
-The NVIDIA AI-Q Blueprint is an enterprise-grade research agent built on the [NVIDIA NeMo Agent Toolkit](https://docs.nvidia.com/nemo/agent-toolkit/latest/) and uses [LangChain Deep Agents](https://docs.langchain.com/oss/python/deepagents/overview). It gives you both **quick, cited answers** and **in-depth, report-style research** in one system, with benchmarks and evaluation harnesses so you can measure quality and improve over time.
+## Detailed Description
 
-<p align="center">
-<img src="./docs/assets/AIQ-arch-light.png" alt="AI-Q Architecture" width="800">
-</p>
+Academic research often requires users to move between quick fact-finding, source discovery, literature review, synthesis, and longer-form reporting. Researchers, faculty, students, and institutional teams may need to gather context from academic papers, web sources, internal knowledge bases, uploaded files, and domain-specific reference material. As the volume of available information grows, the challenge is not only finding relevant sources, but also determining what matters, comparing findings, preserving citation traceability, and turning fragmented information into a useful research output.
 
-**Key features:**
+This AI quickstart demonstrates how an agentic research application can support academic research workflows by combining fast cited responses with deeper, multi-step investigation. For simple questions, the application can return concise answers with supporting sources. For more complex research requests, it can plan the work, gather information across available tools, ask clarifying questions when needed, and generate a more complete research report. This makes the application useful for research discovery, topic exploration, literature review support, policy research, competitive analysis, and other knowledge-intensive workflows that require both speed and source-backed reasoning.
 
-- **Orchestration node** — One node classifies intent (meta vs. research), produces meta responses (for example, greetings, capabilities), and sets research depth (shallow vs. deep).
-- **Shallow research** — Bounded, faster researcher with tool-calling and source citation.
-- **Deep research** — Long-running multi-step planning and research to generate a long-form citation-backed report.
-- **Workflow configuration** — YAML configs define agents, tools, LLMs, and routing behavior so you can tune workflows without code changes.
-- **Modular workflows** — All agents (orchestration node, shallow researcher, deep researcher, clarifier) are composable; each can run standalone or as part of the full pipeline.
-- **Evaluation harnesses** — Built-in benchmarks (for example, FreshQA, DeepResearch) and evaluation scripts to measure quality and iterate on prompts and agent architecture.
-- **Frontend options** — Run through CLI, web UI, or async jobs; the [Getting started](#getting-started) and [Ways to run the agents](#ways-to-run-the-agents).
-- **Deployment options** - Deployment assets for a [docker compose](deploy/compose/) as well as [helm deployment](deploy/helm/deployment-k8s/).
+Built as a customized version of the NVIDIA AI-Q Blueprint for Red Hat AI, this application shows how enterprise-grade research agents can run with NVIDIA models on [Red Hat AI Factory with NVIDIA](https://www.redhat.com/en/products/ai/factory-with-nvidia). The AI-Q Blueprint is built on the [NVIDIA NeMo Agent Toolkit](https://docs.nvidia.com/nemo/agent-toolkit/latest/) and [LangChain Deep Agents](https://docs.langchain.com/oss/python/deepagents/overview), providing teams with a production-ready foundation for building intelligent research workflows. The quickstart adapts this upstream pattern for Red Hat AI environments and adds enterprise platform capabilities such as scalable model serving, observability, governance, and flexible deployment options, highlighting how teams can bring agentic research workflows into hybrid cloud environments while maintaining the operational control needed for production AI applications.
 
+### Architecture Diagrams
 
-## Fork Customizations
+![AI-Q Architecture on Red Hat AI](docs/assets/rhaifn-qs-light.png)
 
-This fork extends the upstream [NVIDIA AI-Q Blueprint](https://github.com/NVIDIA-AI-Blueprints/aiq) as part of the [Red Hat AI Quickstarts](https://www.redhat.com/en/blog/introducing-ai-quickstarts) initiative, adding:
+This architecture diagram shows a customized NVIDIA AI-Q research workflow running on Red Hat AI Factory with NVIDIA. AI-Q routes user requests across different research paths, from simple responses to shallow, tool-augmented research and deeper multi-step research with planning, sub-agents, and report generation.
 
-- **Red Hat rebrand** — Logo, colors, fonts, and app name replaced throughout the Next.js frontend. See the [Rebranding Guide](docs/source/customization/rebranding.md).
-- **vLLM / open model support** — New `configs/config_web_vllm.yml` config that uses `_type: openai` to connect to any OpenAI-compatible endpoint (vLLM, TGI, etc.) instead of NVIDIA NIM. Model-aware thinking prefixes preserve Nemotron performance while giving clean prompts to other models. See the [vLLM Migration Guide](docs/source/customization/vllm-migration.md).
-- **Config validation improvements** — API key checks skip local/private endpoints automatically, so `NVIDIA_API_KEY` is not required when running against local vLLM.
+The workflow is backed by a small set of shared model endpoints rather than one model per agent component. In this quickstart, models can be served with vLLM on Red Hat AI Enterprise or accessed through NVIDIA NGC cloud inference. The application can also connect to web search, academic search, uploaded enterprise data, and a RAG knowledge layer to support cited, source-grounded responses.
 
-> **See also:** [Introducing Red Hat AI Quickstarts](https://www.redhat.com/en/blog/introducing-ai-quickstarts) for the broader context on how Red Hat is making AI blueprints accessible, and the upstream [NVIDIA AI-Q Blueprint repository](https://github.com/NVIDIA-AI-Blueprints/aiq) for the original project.
+Red Hat AI Enterprise adds the platform capabilities needed to operate the application in production-like environments, including scalable model serving, observability, governance, and hybrid cloud deployment flexibility. The diagram represents the AI-Q workflow and supporting services, while the red callouts highlight Red Hat AI Enterprise additions such as vLLM-based serving and observability.
 
-**Quick start with vLLM:**
+## Requirements
 
-```bash
-export VLLM_BASE_URL=http://localhost:8000
-CONFIG_FILE=configs/config_web_vllm.yml nat serve
-```
+### Minimum Hardware Requirements
 
+#### GPU Requirements (for local vLLM deployment)
 
-## Software Components
+This deployment uses **quantized** and smaller-sized models for efficient GPU memory usage in addition to leveraging optional MIG configuration for added GPU optimization. These requirements are when models are deployed **locally on your GPUs** using vLLM (not using NGC cloud inference).
 
-The following are used by this project in the default configuration:
+**Models deployed on your cluster:**
+- **RedHatAI/gpt-oss-120b (Orchestrator)**: ~80GB VRAM (quantized)
+- **RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8 (Intent & Researcher)**: ~25-30GB VRAM (quantized)
+- **nvidia/Nemotron-Mini-4B-Instruct (Summary)**: ~8-10GB VRAM
 
-- [NVIDIA NeMo Agent Toolkit](https://docs.nvidia.com/nemo/agent-toolkit/latest/)
-- [NVIDIA nemotron-3-nano-30b-a3b](https://build.nvidia.com/nvidia/nemotron-3-nano-30b-a3b/modelcard) (agents, researcher)
-- [NVIDIA nemotron-3-super-120b-a12b](https://build.nvidia.com/nvidia/nemotron-3-super-120b-a12b/modelcard) (optional, compatible but Build API has limited availability due to high demand)
-- [NVIDIA nemotron-3-nano-30b-a3b](https://build.nvidia.com/nvidia/nemotron-3-nano-30b-a3b/modelcard) (intent classifier)
-- [GPT-OSS-120B](https://build.nvidia.com/openai/gpt-oss-120b/modelcard) (agents)
-- [NVIDIA nemotron-mini-4b-instruct](https://build.nvidia.com/nvidia/nemotron-mini-4b-instruct/modelcard) (document summary, if used)
-- [NVIDIA llama-nemotron-embed-vl-1b-v2](https://build.nvidia.com/nvidia/llama-nemotron-embed-vl-1b-v2) (embedding model for llamaindex knowledge layer implementation, if used)
-- [NVIDIA nemotron-nano-12b-v2-vl](https://build.nvidia.com/nvidia/nemotron-nano-12b-v2-vl) (vision-language model for llamaindex knowledge layer implementation, if used)
-- [Tavily Search API](https://tavily.com/) for web search
-- [Serper Search API](https://serper.dev/) for paper search (Google Scholar)
+**Standard deployment requirements (full GPUs, not using MIG):**
+- **3x NVIDIA H100** (80GB) or **A100 80GB**
+  - GPU 0: gpt-oss-120b (orchestrator) - 1 GPU (~80GB)
+  - GPU 1: nemotron-nano-30b (intent & researcher) - 1 GPU (~30GB)
+  - GPU 2: nemotron-mini-4b (summary) - 1 GPU (~10GB)
 
-## Target Audience
+**Optional: Multi-Instance GPU (MIG) optimization**
 
-This project is for:
+MIG allows you to partition GPUs into smaller slices, enabling multiple models to share a single GPU efficiently. This can reduce GPU requirements from 3 GPUs down to **2 or even fewer GPUs**.
 
-- **AI researchers and developers**: People building or extending agentic research workflows
-- **Enterprise teams**: Organizations needing tool-augmented research with citation-backed research
-- **NeMo Agent Toolkit users**: Developers looking to understand advanced multi-agent patterns
+NOTE: MIG examples are based on H100 MIG profiles
 
-## Prerequisites
+- **With MIG (all-balanced profile)**: 2x H100 GPUs minimum
+  - GPU 0: 2x 3g.47gb (gpt-oss-120b with tensor parallelism across 2 slices)
+  - GPU 1: 1x 3g.47gb (nemotron-nano-30b) + 1x 1g.12gb (nemotron-mini-4b)
 
-- Python 3.11–3.13
-- [uv](https://github.com/astral-sh/uv) package manager
-- NVIDIA API key from [NVIDIA AI](https://build.nvidia.com) (for NIM models)
-- Node.js 22+ and npm (optional, for web UI mode)
+See `deploy/helm/vllm-models/values.yaml` for detailed MIG configuration examples and options.
 
-> *Dependency Note:* This release is pinned to *NeMo Agent Toolkit (NAT) v1.4.0* (nvidia-nat==1.4.0). NAT v1.5 or later is *not yet supported* by AI-Q and upgrading may introduce breaking changes. The pin will be lifted in a future AI-Q release once compatibility has been validated.
+**Alternative: NGC API Cloud Deployment (No GPU Required)**
 
-**Optional requirements:**
-- Tavily API key (for web search functionality)
-- Serper API key (for academic paper search functionality)
+When using NVIDIA NGC API for cloud-hosted inference, **no local GPU resources are required**. This is the quickest way to get started and test AI-Q.
 
-> **Note:** Configure at least one data source (Tavily web search, Serper search tool, or knowledge layer) to enable research functionality.
+#### Storage
 
-If these optional API keys are not provided, the agent continues to operate without the corresponding search capabilities. Refer to [Obtain API Keys](#obtain-api-keys) for details.
+**Based on default deployment configuration** ([`deploy/helm/deployment-k8s/values.yaml`](deploy/helm/deployment-k8s/values.yaml)):
 
-## Hardware Requirements
+- **PostgreSQL PersistentVolumeClaim**: 10GB
+  - Single PVC (`aiq-postgres-data`) for job metadata, agent checkpoints, and research summaries
+  
+- **ChromaDB and application data**: Uses ephemeral storage (`emptyDir`)
+  - Data does not persist across pod restarts in default configuration
+  - To persist ChromaDB vectors and documents, add a PVC for the backend's `/app/data` volume mount
 
-When using [NVIDIA API Catalog](https://build.nvidia.com/) (the default), inference runs on NVIDIA-hosted infrastructure and there are no local GPU requirements. The hardware references below apply only when self-hosting models via [NVIDIA NIM](https://docs.nvidia.com/nim/).
+- **Container images**: Standard container registry pull and caching (size varies by deployment target)
 
-| Component | Default Model | Self-Hosted Hardware Reference |
-|-----------|---------------|-------------------------------|
-| LLM (research subagent) | `nvidia/nemotron-3-nano-30b-a3b` (default) or `nvidia/nemotron-3-super-120b-a12b` (optional) | [Nemotron 3 Nano support matrix](https://docs.nvidia.com/nim/large-language-models/latest/supported-models.html#nvidia-nemotron-3-nano), [Nemotron 3 Super support matrix](https://docs.nvidia.com/nim/large-language-models/latest/supported-models.html#nvidia-nemotron-3-super-120b-a12b) |
-| LLM (intent classifier) | `nvidia/nemotron-3-nano-30b-a3b` | [Nemotron 3 Nano support matrix](https://docs.nvidia.com/nim/large-language-models/latest/supported-models.html#nvidia-nemotron-3-nano) |
-| LLM (deep research orchestrator, planner) | `openai/gpt-oss-120b` | [GPT OSS support matrix](https://docs.nvidia.com/nim/large-language-models/latest/supported-models.html#gpt-oss-120b) |
-| Document summary (optional) | `nvidia/nemotron-mini-4b-instruct` | [Nemotron Mini 4B](https://build.nvidia.com/nvidia/nemotron-mini-4b-instruct/) |
-| Text embedding | `nvidia/llama-nemotron-embed-vl-1b-v2` | [NeMo Retriever embedding support matrix](https://docs.nvidia.com/nim/nemo-retriever/text-embedding/latest/support-matrix.html) |
-| VLM (image/chart extraction, optional) | `nvidia/nemotron-nano-12b-v2-vl` | [Vision language model support matrix](https://docs.nvidia.com/nim/vision-language-models/latest/support-matrix.html#nemotron-nano-12b-v2-vl) |
-| Knowledge layer (Foundational RAG, optional) | -- | [RAG Blueprint support matrix](https://docs.nvidia.com/rag/latest/support-matrix.html) |
+**Minimum recommended**: Ensure adequate node storage for PVCs plus container image caching
 
-For detailed installation instructions, refer to [Installation -- Hardware Requirements](docs/source/get-started/installation.md#hardware-requirements).
+### Minimum Software Requirements
 
-## Architecture
+- Red Hat OpenShift Container Platform (tested with v4.20)
+- Red Hat OpenShift AI v3.3.2+ (tested with v3.3.2)
+- NVIDIA GPU Operator v24.6.0+
+- Helm CLI
+- OpenShift Client CLI (oc)
 
-AI-Q uses a [LangGraph](https://www.langchain.com/langgraph)-based state machine with the following key components:
+### Required User Permissions
 
-- **Orchestration node**: Classifies intent (meta vs. research), produces meta responses when needed, and sets depth (shallow vs. deep) in one step
-- **Shallow research agent**: Bounded tool-augmented research optimized for speed
-- **Deep research agent**: Multi-phase research with planning, iteration, and citation management
+- cluster-admin or namespace admin permissions for creating resources in your target namespace
+- Ability to create PersistentVolumeClaims
+- Ability to create Secrets
+- For vLLM deployment: Permissions to create KServe InferenceServices
 
-Each agent can be run individually or as part of the orchestrated workflow. For detailed architecture documentation, refer to [Architecture](docs/source/architecture/overview.md).
+## Deploy
 
-## Getting Started
+The following instructions will deploy the Red Hat Research AI quickstart to your Red Hat AI Enterprise environment using simple Helm deployments.
 
-### Clone the Repository
+### Prerequisites
+
+Before deployment, ensure you have the following in place:
+- OpenShift cluster with OpenShift AI installed (see version requirements above)
+- OpenShift AI has a DataScienceCluster resource with kserve and dashboard components set to managed
+- For vLLM deployment: GPU nodes available with NVIDIA GPU Operator installed
+- For NGC deployment: No GPU infrastructure required
+
+Obtain the following API keys:
+- **NVIDIA_API_KEY** (required for NGC model deployment)
+  - Get your API key at: https://org.ngc.nvidia.com/setup/api-key
+  - Sign up for NIM access at: https://build.nvidia.com/
+- **TAVILY_API_KEY** (optional but recommended for web search functionality)
+  - Sign up at: https://tavily.com/
+- **SERPER_API_KEY** (optional for academic paper search via Google Scholar)
+  - Sign up at: https://serper.dev/
+
+**Note:** At least one data source (Tavily web search, Serper paper search, or uploaded documents) is required to enable research functionality beyond basic conversational queries.
+
+### Install
+
+1. Clone the AI quickstart repository, and git checkout the quickstart deployment branch:
 
 ```bash
-git clone -b red-hat-v2.1.0 https://github.com/rh-ai-quickstart/rh-research.git && cd rh-research
+git clone https://github.com/rh-ai-quickstart/rh-research
+cd rh-research
+git checkout quickstart
 ```
 
-### Automated Setup
-
-Run the setup script to initialize the environment:
+2. Ensure you are logged into your OpenShift cluster as cluster-admin or namespace admin:
 
 ```bash
-./scripts/setup.sh
+oc whoami
 ```
 
-This script:
-- Creates a Python virtual environment with uv
-- Installs all Python dependencies (core, frontends, benchmarks, data sources)
-- Installs UI dependencies (if Node.js is available)
-
-### Manual Installation
-
-For selective installation, install packages individually:
+3. Set environment variables for API keys:
 
 ```bash
-# Create and activate virtual environment
-uv venv --python 3.13 .venv
-source .venv/bin/activate
+# NVIDIA API key (required for NGC models, optional for vLLM model pulls)
+export NVIDIA_API_KEY="nvapi-..."
 
-# Install core with development dependencies
-uv pip install -e ".[dev]"
+# Tavily API key for web search (optional but recommended)
+export TAVILY_API_KEY="tvly-..."
 
-# Install frontends (pick what you need)
-uv pip install -e ./frontends/cli          # CLI frontend
-uv pip install -e ./frontends/debug        # Debug console
-uv pip install -e ./frontends/aiq_api      # Unified API (includes debug)
-
-# Install benchmarks (pick what you need)
-uv pip install -e ./frontends/benchmarks/freshqa
-
-# Install data sources (pick what you need)
-uv pip install -e ./sources/tavily_web_search
-uv pip install -e ./sources/google_scholar_paper_search
-uv pip install -e "./sources/knowledge_layer[llamaindex,foundational_rag]"
+# Serper API key for paper search (optional)
+export SERPER_API_KEY="..."
 ```
 
-### Obtain API Keys
-
-
-| API        | Environment Variable | Purpose                   | Required                                                    |
-| ---------- | -------------------- | ------------------------- | ----------------------------------------------------------- |
-| NVIDIA API | `NVIDIA_API_KEY`     | LLM inference through NIM | Yes                                                         |
-| Tavily     | `TAVILY_API_KEY`     | Web search                | No (if not specified, agent continues without web search)   |
-| Serper     | `SERPER_API_KEY`     | Academic paper search     | No (if not specified, agent continues without paper search) |
-
-
-#### Obtain an NVIDIA API Key
-
-1. Sign in to [NVIDIA Build](https://build.nvidia.com/)
-2. Click on any model, then select "Deploy" > "Get API Key" > "Generate Key"
-
-#### Obtain a Tavily API Key
-
-1. Sign in to [Tavily](https://tavily.com/)
-2. Navigate to your dashboard
-3. Generate an API key
-
-#### Obtain a Serper API Key
-
-1. Sign in to [Serper](https://serper.dev/)
-2. Generate an API key from your dashboard
-
-### Set Up Environment Variables
-
-Create a `.env` file in `deploy/` directory:
+4. Create namespace and secrets:
 
 ```bash
-cp deploy/.env.example deploy/.env
+# Create namespace
+oc create namespace ns-aiq
+
+# Create application secrets
+oc create secret generic aiq-credentials -n ns-aiq \
+  --from-literal=NVIDIA_API_KEY="$NVIDIA_API_KEY" \
+  --from-literal=TAVILY_API_KEY="$TAVILY_API_KEY" \
+  --from-literal=SERPER_API_KEY="$SERPER_API_KEY" \
+  --from-literal=DB_USER_NAME="aiq" \
+  --from-literal=DB_USER_PASSWORD="aiq_dev"
+
+# For NGC-based deployments, create image pull secret
+oc create secret docker-registry ngc-api -n ns-aiq \
+  --docker-server=nvcr.io \
+  --docker-username='$oauthtoken' \
+  --docker-password="$NVIDIA_API_KEY"
 ```
 
-Replace your API keys.
+5. Choose your deployment option:
 
-> **Note:** Depending on your usecase, deep research report quality can be enhanced by enabling searching across academic research papers. We use Serper for this. If you want to use paper search, follow the steps in the [Customization guide](docs/source/customization/tools-and-sources.md#disabling-a-tool) to enable it.
+**AI quickstart decision tree:**
+```
+Do you have GPU infrastructure?
+├─ NO  → Option B: NGC Cloud Models (easy onramp, no GPU needed)
+└─ YES → Do you want to run models locally?
+          ├─ YES → Option A: vLLM Local Models (recommended for production)
+          └─ NO  → Option B: NGC Cloud Models
+```
 
-## Configuration Files
+---
 
-The `configs/` directory holds YAML workflow configs that define agents, tools, LLMs, and routing. Use the one that matches your run mode and data sources:
+**Option A: vLLM Local Models**
 
-| Config | Models | Description |
-|--------|--------|-------------|
-| `config_cli_default.yml` | Nemotron 3 Nano 30B, GPT-OSS 120B | CLI default. Web search; optional paper search (requires `SERPER_API_KEY`); no knowledge retrieval. Nemotron Super is commented out but can be enabled for higher quality. |
-| `config_web_default_llamaindex.yml` | Nemotron 3 Nano 30B, GPT-OSS 120B, Nemotron Mini 4B | Web default. LlamaIndex knowledge retrieval; web search; optional paper search (requires `SERPER_API_KEY`). Nemotron Super is commented out but can be enabled for higher quality. |
-| `config_web_frag.yml` | Nemotron 3 Nano 30B, GPT-OSS 120B | Web + Foundational RAG (external RAG server). Helm default. See [RAG Blueprint](https://github.com/NVIDIA-AI-Blueprints/rag/tree/main) for an example RAG deployment. Nemotron Super is commented out but can be enabled for higher quality. |
-| `config_frontier_models.yml` | GPT-5.2 (orchestrator/planner), Nemotron 3 Nano 30B, Nemotron Mini 4B | Hybrid: frontier orchestrator/planner, open researcher. LlamaIndex; web search; optional paper search (requires `SERPER_API_KEY`). Requires `OPENAI_API_KEY`. Nemotron Super is commented out but can be enabled for higher quality. |
-
-## Ways to Run the Agents
-
-The `frontends/` directory contains different interfaces for interacting with the agents. You can also run agents directly through the NeMo Agent Toolkit CLI.
-
-### Command-line interface (CLI)
-
-The CLI provides an interactive research assistant in your terminal:
+Deploy models locally on your GPUs for full deployment control and integration with the Red Hat AI Enterprise observability stack.
 
 ```bash
-# Activate the virtual environment
-source .venv/bin/activate
+cd deploy/helm
 
-# Run with the convenience script
-./scripts/start_cli.sh
+# Step 1: Deploy vLLM models via KServe
+helm install vllm-models vllm-models/ \
+  -n ns-aiq
 
-# Verbose logging
-./scripts/start_cli.sh --verbose
+# Wait for InferenceServices to be ready (2-5 minutes for model downloads)
+oc get inferenceservices -n ns-aiq -w
 
-# Or run directly with the NeMo Agent Toolkit CLI (dotenv loads deploy/.env into the environment)
-dotenv -f deploy/.env run nat run --config_file configs/config_cli_default.yml --input "How do I install CUDA?"
+# Step 2: Deploy AI-Q application with vLLM configuration
+helm dependency update deployment-k8s/
+helm install aiq deployment-k8s/ \
+  -n ns-aiq \
+  -f values-vllm.yaml
+
+# Verify deployment
+oc get pods -n ns-aiq
 ```
 
-The CLI frontend source is in `frontends/cli/`.
+**What you get:**
+- LLM inference via local vLLM servers on your GPUs
+- Embedded LlamaIndex with ChromaDB for document storage
+- Full control over model selection and hosting
+- Data stays within your cluster
 
-### Web UI
+---
 
-For a full web-based experience:
+**Option B: NGC Cloud Models**
+
+Use NVIDIA's cloud-hosted model inference without GPU infrastructure.
 
 ```bash
-./scripts/start_e2e.sh
+cd deploy/helm
+
+# Deploy AI-Q with default NGC configuration
+helm dependency update deployment-k8s/
+helm install aiq deployment-k8s/ \
+  -n ns-aiq
+
+# Verify deployment
+oc get pods -n ns-aiq
 ```
 
-This starts:
-- Backend API server at `http://localhost:8000`
-- Frontend UI at `http://localhost:3000`
+**What you get:**
+- LLM inference via NGC API (cloud-hosted, pay-per-use)
+- Embedded LlamaIndex with ChromaDB for document storage
+- No GPU infrastructure needed
+- Fastest way to get started
 
-The web UI source is in `frontends/ui/`. Refer to [frontends/ui/README.md](frontends/ui/README.md) for more details.
+---
 
-#### Web UI with Docker Compose
+**Advanced Options:**
 
-You can also run the backend and UI with Docker Compose:
+The NVIDIA AI-Q Blueprint is designed to work optionally with the NVIDIA RAG Blueprint as a RAG backend. We have published an AI quickstart based on this RAG blueprint, similarly customized for Red Hat AI Enterprise deployments, that may be used with this research assistant AI quickstart.
+
+[RAG AI quickstart based on NVIDIA RAG Blueprint](https://docs.redhat.com/en/learn/ai-quickstarts/rh-aml-rag-nvidia)
+
+To integrate with the RAG quickstart, see the full deployment guide for the following configuration options:
+- **Option C:** vLLM + RAG Blueprint (`values-vllm-frag.yaml`)
+- **Option D:** NGC + RAG Blueprint (`values-frag.yaml`)
+
+See [Deployment Guide](docs/advanced-docs/deployment-guide.md) for complete instructions.
+
+---
+
+#### Verify Installation
+
+Check all deployed pods are running:
 
 ```bash
-cd deploy/compose
-
-# No-auth local setup (LlamaIndex default)
-docker compose --env-file ../.env -f docker-compose.yaml up -d --build
-
-# To select a different backend config, set BACKEND_CONFIG in deploy/.env, for example:
-# BACKEND_CONFIG=/app/configs/config_web_frag.yml
+oc get pods -n ns-aiq
 ```
 
-For more details, refer to:
-- `deploy/compose/README.md`
+**Expected pods (all deployments):**
+- `aiq-backend-*` - Main application backend
+- `aiq-frontend-*` - Web UI  
+- `aiq-postgres-*` - PostgreSQL database
 
-### Async Deep Research Jobs
+**Additional pods (vLLM deployment only):**
+- `gpt-oss-120b-predictor-*` - Orchestrator model server
+- `nemotron-nano-30b-predictor-*` - Intent & researcher model server
+- `nemotron-mini-4b-predictor-*` - Summary model server
 
-Endpoints, SSE streaming, and debug console: refer to [frontends/aiq_api/README.md](frontends/aiq_api/README.md).
+### Using the research assistant AI quickstart
 
-### Benchmarks
-
-To run agents in evaluation mode, refer to the [Evaluating the Workflow](#evaluating-the-workflow) section.
-
-### Jupyter Notebooks
-
-The `docs/notebooks/` directory contains a three-part series that walks through the blueprint from first run to full customization. Run them in order:
-
-| # | Notebook | What it covers | Prerequisites |
-|---|----------|----------------|---------------|
-| 0 | [Getting Started with AI-Q](docs/notebooks/0_Getting_Started_with_AIQ.ipynb) | Full blueprint overview — environment setup, orchestrated workflow (intent routing, shallow and deep research), and Docker Compose deployment | `NVIDIA_API_KEY`; optionally `TAVILY_API_KEY`, `SERPER_API_KEY` |
-| 1 | [Deep Researcher — Web Search](docs/notebooks/1_Deep_Researcher_Web_Search.ipynb) | Deep researcher in depth — Python API, `nat run`, and end-to-end evaluation against the DeepResearch Bench with `nat eval` | Notebook 0 completed; `NVIDIA_API_KEY`, `TAVILY_API_KEY`, `SERPER_API_KEY`; OpenAI or Gemini key for the judge model |
-| 2 | [Deep Researcher — Customization](docs/notebooks/2_Deep_Researcher_Customization.ipynb) | Extending the deep researcher — adding paper search, assigning different LLMs per agent role, editing prompts, and enabling the knowledge layer | Notebooks 0 and 1 completed; `NVIDIA_API_KEY`, `TAVILY_API_KEY`, `SERPER_API_KEY` |
-
-
-## Evaluating the Workflow
-
-The `frontends/benchmarks/` directory contains evaluation pipelines for assessing agent performance.
-
-### Available Benchmarks
-
-| Benchmark | Description | Location |
-|-----------|-------------|----------|
-| Deep Research Bench | RACE and FACT evaluation for research quality | `frontends/benchmarks/deepresearch_bench/` |
-| FreshQA | Factuality evaluation on time-sensitive questions | `frontends/benchmarks/freshqa/` |
-
-### Running Evaluations
-
-### Step 1: Install the dataset
-
-The dataset files are not included in the repository. We have included a script to retrieve them from the [Deep Research Bench Github Repository](https://github.com/Ayanami0730/deep_research_bench/tree/main) and format them for the NeMo Agent Toolkit evaluator.
-
-To download the dataset files, run the following script:
+1. Get the frontend URL:
 
 ```bash
-python frontends/benchmarks/deepresearch_bench/scripts/download_drb_dataset.py
+echo "https://$(oc get route -n ns-aiq aiq-frontend -o jsonpath='{.spec.host}')"
 ```
 
-### Step 2: Generate reports using NAT evaluation harness
+2. Navigate to the frontend UI in your browser
+
+3. Test the agent with different query types:
+
+**Simple greeting (meta response - instant):**
+```
+Hello, what can you do?
+```
+**Expected:** Friendly greeting explaining AI-Q capabilities within 2-5 seconds.
+
+**Shallow research (quick research with citations - 10-30 seconds):**
+```
+What is Red Hat OpenShift?
+```
+**Expected:** Factual answer with web search citations within 10-30 seconds.
+
+**Deep research (comprehensive analysis - 2-5 minutes):**
+```
+Provide a comprehensive analysis of Kubernetes security best practices
+```
+**Expected:** Multi-section structured report with planning steps, research progress updates, and comprehensive citations. Overall end-to-end processing time varies.
+
+4. (Optional) Upload documents for knowledge retrieval:
+
+Click the upload button to add PDF, DOCX, Markdown or TXT files. Once uploaded, the agent can answer questions based on your document content:
+
+```
+What information is in the document I uploaded?
+```
+
+**Expected:** Answer synthesized from your uploaded documents with citations to specific sections.
+
+For detailed verification steps and troubleshooting, see the [User Verification Guide](docs/user-docs/user-verification-guide.md).
+
+### Delete
+
+Uninstall the quickstart deployment:
 
 ```bash
-dotenv -f deploy/.env run nat eval --config_file frontends/benchmarks/deepresearch_bench/configs/config_deep_research_bench.yml
+# Delete AI-Q application
+helm uninstall aiq -n ns-aiq
+
+# For vLLM deployments, delete model servers
+helm uninstall vllm-models -n ns-aiq
+
+# Delete all PVCs to remove data
+oc delete pvc --all -n ns-aiq
+
+# (Optional) Delete the entire namespace
+oc delete namespace ns-aiq
 ```
 
-### Step 3: Convert the output into a compatible format
-```bash
-python frontends/benchmarks/deepresearch_bench/scripts/export_drb_jsonl.py --input <path to your workflow_output.json> --output <path to the output file you want to create with .jsonl extension>
-```
+## Customization
 
-### Step 4: Run evaluation
-Follow instructions in the [Deep Research Bench Github Repository](https://github.com/Ayanami0730/deep_research_bench/tree/main) to run evaluation and obtain scores.
+This quickstart focuses on deploying AI-Q on Red Hat OpenShift AI using pre-built container images. For customization options:
 
+### Quick Configuration Changes
 
-### Optional: Phoenix Tracing
+- **Model Selection:** Edit `deploy/helm/vllm-models/values.yaml` to change vLLM models
+- **Agent Behavior:** Modify inline ConfigMaps in values files (e.g., `values-vllm.yaml`)
+- **Data Sources:** Configure API keys via the `aiq-credentials` secret
+- **RAG Integration:** Update `RAG_SERVER_URL` and `RAG_INGEST_URL` environment variables
 
-If your config enables Phoenix tracing, start the Phoenix server before running `nat eval`.
+### Building from Source
 
-Start server (separate terminal):
+For UI customization, agent logic changes, or adding features:
 
-```bash
-source .venv/bin/activate
-phoenix serve
-```
+1. Work within our `red-hat-v2.1.0` branch, containing all of the upstream source code in addition to UI customizations. Or alternatively, clone the upstream repository: `git clone https://github.com/NVIDIA-AI-Blueprints/aiq` 
+2. Make your changes to `frontends/ui/` (UI) or `src/aiq_agent/` (backend)
+3. Build custom container images
+4. Update Helm values to use your custom images
 
-For detailed benchmark documentation, refer to:
-- [Deep Research Bench README](frontends/benchmarks/deepresearch_bench/README.md)
-- [FreshQA README](frontends/benchmarks/freshqa/README.md)
+**Full details:** See [docs/advanced-docs/customization-reference.md](docs/advanced-docs/customization-reference.md) for step-by-step guidance.
 
-## Development
+### Container Images & Versioning
 
-For development, contribution, and documentation, refer to:
+This quickstart is based on **NVIDIA AI-Q Blueprint v2.1.0** with Red Hat-specific enhancements. The deployment uses pre-built container images:
 
-- **[Development and Contributing](docs/source/contributing/index.md)**: Setup, testing, PR workflow, sign-off/DCO
-- **[Tutorial Notebooks](docs/notebooks/)**: Getting started overview, deeper dive, and customization notebooks
-- **[Architecture](docs/source/architecture/overview.md)**: Component details and data flow
-- **[Customization](docs/source/customization/index.md)**: Configuration and customization options
-- **[Knowledge Layer Setup](sources/knowledge_layer/KNOWLEDGE-LAYER-SETUP.md)**: RAG backends and document ingestion
-- **[Docs index](docs/README.md)**: Full documentation list and component docs
-- **[Changelog](docs/source/resources/changelog.md)**: Version history and changes
+- **Backend:** Based on [NVIDIA AI-Q v2.1.0](https://github.com/NVIDIA-AI-Blueprints/aiq/tree/v2.1.0) with Red Hat branding and vLLM integration
+- **Frontend:** Based on [NVIDIA AI-Q v2.1.0](https://github.com/NVIDIA-AI-Blueprints/aiq/tree/v2.1.0) with Red Hat branding
 
-## Roadmap
+**What's different from upstream?** See our [Fork Customizations](docs/advanced-docs/fork.md) for a detailed explanation of Red Hat-specific changes.
 
-- [ ] **[NeMo Guardrails](https://github.com/NVIDIA-NeMo/Guardrails) Integration:** Enhance safety and security guardrails.
-- [ ] **[NVIDIA Dynamo](https://github.com/ai-dynamo/dynamo) Integration:** Reduce latency via priority scheduling at scale.
-- [ ] **MCP Authentication:** Implement secure login/auth for MCP connections.
-- [ ] **Skills & Sandboxing:** Support custom skills within isolated environments.
-- [ ] **Dynamic Model Routing:** Allow sub-agents to automatically select the optimal model per task.
-- [ ] **Resource Management:** Implement configurable token caps and tool-call budgets.
-- [ ] **Expanded Web Search:** Additional integration examples including Perplexity and You.com.
-- [ ] **Collaborative Rewriting:** Additional report rewriting agent and HITL Q&A.
-- [ ] **Multimedia Output:** Embed audio, video, and images directly into reports.
-- [ ] **Voice-to-Text Input:** Integrate [NVIDIA Riva](https://developer.nvidia.com/riva) for hands-free accessibility.
+**Additional Resources:**
+- [Deployment Guide](docs/advanced-docs/deployment-guide.md) - All four deployment options (vLLM, NGC, RAG AI quickstart)
+- [Configuration Reference](docs/advanced-docs/configuration-reference.md) - YAML parameter reference for advanced configuration
 
-## Security Considerations
+## References
 
-- The AI-Q Blueprint is shared as a reference and is provided "as is". The security in the production environment is the responsibility of the end users deploying it. When deploying in a production environment, please have security experts review any potential risks and threats; define the trust boundaries, implement logging and monitoring capabilities, secure the communication channels, integrate AuthN & AuthZ with appropriate access controls, keep the deployment up to date, ensure the containers/source code are secure and free of known vulnerabilities.
-- A robust frontend that handles AuthN & AuthZ is highly recommended. Missing AuthN & AuthZ will result in ungated access to customer models if directly exposed e.g. the internet, resulting in either cost to the customer, resource exhaustion, or denial of service.
-- End users are encouraged to add [NeMo Guardrails](https://github.com/NVIDIA-NeMo/Guardrails) and additional prompt content filtering to the blueprint. Guardrails will be native in upcoming release.
-- The AI-Q Blueprint doesn't require any privileged access to the system.
-- The AI-Q Blueprint doesn't currently generate any code that may require sandboxing. Future roadmap features (such as custom skills) will introduce sandboxed execution environments.
-- End users are responsible for ensuring the availability of their deployment.
-- End users are responsible for building, and patching, the container images to keep them up to date.
-- The end users are responsible for ensuring that OSS packages used by the developer blueprint are current.
-- The logs from middleware, backend, and demo app are printed to standard out. They can include input prompts and output completions for development purposes. The end users are advised to handle logging securely and avoid information leakage for production use cases.
-
+- [NVIDIA NeMo Agent Toolkit](https://docs.nvidia.com/nemo/agent-toolkit/latest/) - Framework for building production-ready AI agents
+- [NVIDIA AI-Q Blueprint](https://github.com/NVIDIA-AI-Blueprints/aiq) - Upstream project repository
+- [LangChain Deep Agents](https://docs.langchain.com/oss/python/deepagents/overview) - Multi-agent orchestration framework
+- [vLLM](https://vllm.ai/) - High-throughput and memory-efficient inference engine for LLMs
+- [NVIDIA Nemotron](https://developer.nvidia.com/nemotron) - Family of open models with open weights optimized for specialized AI agents
+- [NVIDIA RAG Blueprint](https://github.com/NVIDIA-AI-Blueprints/rag) - Enterprise RAG infrastructure
+- [Red Hat AI Quickstarts](https://www.redhat.com/en/blog/introducing-ai-quickstarts) - Collection of AI blueprints for Red Hat AI
 
 ## License
 
-This project will download and install additional third-party open source software projects. Review the license terms of these open source projects before use, found in [LICENSE-THIRD-PARTY](LICENSE-THIRD-PARTY).
+This AI quickstart is based on the [NVIDIA AI-Q Blueprint](https://github.com/NVIDIA-AI-Blueprints/aiq), which is licensed under the **Apache License 2.0**. This repository contains Red Hat-specific customizations and deployment configurations for the upstream AI-Q project.
 
-GOVERNING TERMS: AIQ blueprint software and materials are governed by the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0)
+- **Project License:** See [licenses/LICENSE](licenses/LICENSE) for the Apache License 2.0 text
+- **Third-Party Dependencies:** See [licenses/LICENSE-THIRD-PARTY](licenses/LICENSE-THIRD-PARTY) for all third-party software licenses
+
+**Note:** This is not the official NVIDIA AI-Q Blueprint repository. For the upstream project, see [NVIDIA-AI-Blueprints/aiq](https://github.com/NVIDIA-AI-Blueprints/aiq).
+
+## Tags
+
+- **Product**: Red Hat OpenShift AI
+- **Use case**: Research automation, knowledge synthesis, intelligent information retrieval
+- **Industry**: Cross-industry
+- **Models**: NVIDIA Nemotron, GPT-OSS-120B, vLLM-compatible open models
+
+
+
+

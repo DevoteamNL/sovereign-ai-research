@@ -14,15 +14,15 @@ This document tracks changes made to the [NVIDIA AI-Q Blueprint](https://github.
 AI-Q now supports running with locally-hosted vLLM models in addition to NGC cloud models:
 
 - **Four deployment configurations** via Helm values files:
-  - `values-vllm.yaml`: vLLM models + embedded LlamaIndex/ChromaDB (production, local GPUs)
-  - `values.yaml` (default): NGC cloud models + embedded LlamaIndex/ChromaDB (quick start)
-  - `values-vllm-frag.yaml`: vLLM models + external RAG Blueprint (production with advanced RAG)
-  - `values-frag.yaml`: NGC cloud models + external RAG Blueprint (quick start with advanced RAG)
+  - `values-vllm.yaml`: vLLM models + embedded LlamaIndex/ChromaDB
+  - `values.yaml` (default): NGC cloud models + embedded LlamaIndex/ChromaDB
+  - `values-vllm-frag.yaml`: vLLM models + RAG AI quickstart (based on NVIDIA RAG Blueprint)
+  - `values-frag.yaml`: NGC cloud models + RAG AI quickstart (based on NVIDIA RAG Blueprint)
 
 - **vLLM configuration files** embedded as ConfigMaps in Helm values:
   - `config_web_vllm.yml` (in `values-vllm.yaml`): Uses `_type: openai` for vLLM endpoints with env var overrides for model names and base URLs
-  - `config_web_vllm_frag.yml` (in `values-vllm-frag.yaml`): vLLM + RAG Blueprint integration
-  - `config_web_frag.yml` (in `values-frag.yaml`): NGC + RAG Blueprint integration
+  - `config_web_vllm_frag.yml` (in `values-vllm-frag.yaml`): vLLM + RAG AI quickstart (based on NVIDIA RAG Blueprint) integration
+  - `config_web_frag.yml` (in `values-frag.yaml`): NGC + RAG AI quickstart (based on NVIDIA RAG Blueprint) integration
   - All configs support environment variable substitution for flexible endpoint configuration
 
 - **vLLM model deployment chart** (`deploy/helm/vllm-models/`):
@@ -34,14 +34,14 @@ AI-Q now supports running with locally-hosted vLLM models in addition to NGC clo
 ### RAG Integration Enhancements
 
 - **Dual RAG backend support** in knowledge_search function:
-  - `backend: llamaindex` - Embedded LlamaIndex with ChromaDB (single-node, quick start)
-  - `backend: foundational_rag` - External NVIDIA RAG Blueprint integration (distributed, production)
+  - `backend: llamaindex` - Embedded LlamaIndex with ChromaDB
+  - `backend: foundational_rag` - RAG AI quickstart based on NVIDIA RAG Blueprint
   
-- **RAG Blueprint deployment option**:
+- **RAG AI quickstart deployment option**:
   - Separate configuration for query (`RAG_SERVER_URL`) and ingestion (`RAG_INGEST_URL`) endpoints
   - Configurable collection names and timeout settings
-  - PostgreSQL backend for document summaries when using RAG Blueprint
-  - See [AML RAG NVIDIA Quickstart](https://github.com/rh-ai-quickstart/aml-rag-nvidia) for RAG Blueprint deployment
+  - PostgreSQL backend for document summaries when using RAG AI quickstart
+  - See [RAG AI quickstart documentation](https://docs.redhat.com/en/learn/ai-quickstarts/rh-aml-rag-nvidia) for deployment
 
 ### Database Integration
 

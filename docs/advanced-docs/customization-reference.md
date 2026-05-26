@@ -67,8 +67,8 @@ This quickstart supports four deployment configurations:
 |--------|--------|-----------|-------------|----------|
 | **A** | vLLM (local GPUs) | LlamaIndex | `values-vllm.yaml` | Production, data privacy |
 | **B** | NGC (cloud) | LlamaIndex | `values.yaml` (default) | Quick start, no GPU |
-| **C** | vLLM (local GPUs) | RAG Blueprint | `values-vllm-frag.yaml` | Production, advanced RAG |
-| **D** | NGC (cloud) | RAG Blueprint | `values-frag.yaml` | Quick start + advanced RAG |
+| **C** | vLLM (local GPUs) | RAG AI quickstart | `values-vllm-frag.yaml` | Production, advanced RAG |
+| **D** | NGC (cloud) | RAG AI quickstart | `values-frag.yaml` | Quick start + advanced RAG |
 
 ### Option A & C: vLLM on KServe (Local GPUs)
 
@@ -88,9 +88,9 @@ This quickstart supports four deployment configurations:
 
 **Model configuration:** Inline ConfigMaps in values files
 
-### Options C & D: RAG Blueprint Integration
+### Options C & D: RAG AI quickstart Integration
 
-**External NVIDIA RAG Blueprint** for knowledge retrieval. This provides:
+**RAG AI quickstart (based on NVIDIA RAG Blueprint)** for knowledge retrieval. This provides:
 - Advanced multimodal document processing
 - GPU-accelerated vector search
 - Production-grade scalability
@@ -222,9 +222,9 @@ functions:
 - Best for: Quick start, simple deployments
 - Limitations: Single-pod scaling, basic document processing
 
-### RAG Blueprint (Options C & D)
+### RAG AI quickstart (Options C & D)
 
-**External NVIDIA RAG Blueprint deployment** - advanced features.
+**RAG AI quickstart (based on NVIDIA RAG Blueprint) deployment** - advanced features.
 
 ```yaml
 functions:
@@ -450,7 +450,7 @@ Using a different version may cause incompatibilities.
 
 ### Related Quickstarts
 
-- **AML RAG Quickstart:** [GitHub](https://github.com/rh-ai-quickstart/aml-rag-nvidia) - For RAG Blueprint deployment (Options C & D)
+- **RAG AI quickstart:** [Documentation](https://docs.redhat.com/en/learn/ai-quickstarts/rh-aml-rag-nvidia) - RAG AI quickstart based on NVIDIA RAG Blueprint (Options C & D)
 - **Red Hat AI Quickstarts:** [Collection](https://www.redhat.com/en/blog/introducing-ai-quickstarts)
 
 ### Support

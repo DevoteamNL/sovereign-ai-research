@@ -7,12 +7,12 @@ This guide covers the three deployment configurations for AI-Q on OpenShift AI.
 ```
 Do you have vLLM server(s) running?
 ├─ YES
-│   ├─ Do you have NVIDIA RAG Blueprint deployed?
-│   │  ├─ YES → Use Option D: vLLM + RAG Blueprint (fully local, recommended for production)
+│   ├─ Do you have the RAG AI quickstart (based on NVIDIA RAG Blueprint) deployed?
+│   │  ├─ YES → Use Option D: vLLM + RAG AI quickstart (fully local, recommended for production)
 │   │  └─ NO → Use Option A: vLLM + Embedded RAG (fully local)
 └─ NO
-    ├─ Do you have NVIDIA RAG Blueprint deployed?
-    │  ├─ YES → Use Option C: NGC + RAG Blueprint
+    ├─ Do you have the RAG AI quickstart (based on NVIDIA RAG Blueprint) deployed?
+    │  ├─ YES → Use Option C: NGC + RAG AI quickstart
     │  └─ NO → Use Option B: NGC + Embedded RAG (quick start)
 ```
 
@@ -73,17 +73,13 @@ The `values-vllm.yaml` file is pre-configured for use with the `vllm-models` cha
 If using your own vLLM server(s) instead of the vllm-models chart:
 
 ```bash
-helm upgrade --install aiq deployment-k8s/ \
+helm install aiq deployment-k8s/ \
   -n ns-aiq --create-namespace \
   -f values-vllm.yaml \
   --set aiq.apps.backend.env.VLLM_BASE_URL=http://your-vllm-server:8000 \
   --set aiq.apps.backend.env.VLLM_ORCHESTRATOR_BASE_URL=http://your-orchestrator-server:8000 \
   --set aiq.apps.backend.env.VLLM_SUMMARY_BASE_URL=http://your-summary-server:8000
 ```
-
-For vLLM deployment guides, see:
-- [vLLM Migration Guide](source/customization/vllm-migration.md)
-- [vLLM Model Recipes](source/customization/vllm-recipes.md)
 
 ---
 
@@ -128,12 +124,12 @@ The default `deployment-k8s/values.yaml` configures:
 
 ---
 
-## Option C: NGC Models with RAG Blueprint
+## Option C: NGC Models with RAG AI quickstart
 
 **Best for:** Cloud LLMs with enterprise RAG infrastructure
 
 **What you need:**
-- [NVIDIA RAG Blueprint](https://github.com/NVIDIA-AI-Blueprints/rag) deployed and accessible
+- [RAG AI quickstart (based on NVIDIA RAG Blueprint)](https://docs.redhat.com/en/learn/ai-quickstarts/rh-aml-rag-nvidia) deployed and accessible
 - RAG server URLs (query and ingestion endpoints)
 - API keys: `NVIDIA_API_KEY`, `TAVILY_API_KEY` (optional)
 
@@ -150,7 +146,7 @@ cd deploy/helm
 # Update chart dependencies
 helm dependency update deployment-k8s/
 
-# Install with RAG Blueprint configuration
+# Install with RAG AI quickstart (based on NVIDIA RAG Blueprint) configuration
 helm upgrade --install aiq deployment-k8s/ \
   -n ns-aiq --create-namespace \
   -f values-frag.yaml \
@@ -170,7 +166,7 @@ The `values-frag.yaml` file configures:
 
 ---
 
-## Option D: vLLM Models with RAG Blueprint (Recommended for Production)
+## Option D: vLLM Models with RAG AI quickstart
 
 **Best for:** Fully local deployment with enterprise RAG infrastructure
 
@@ -180,7 +176,7 @@ The `values-frag.yaml` file configures:
   - `RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` (intent & research)
   - `RedHatAI/gpt-oss-120b` (orchestration)
   - `nvidia/Nemotron-Mini-4B-Instruct` (summarization)
-- [NVIDIA RAG Blueprint](https://github.com/NVIDIA-AI-Blueprints/rag) deployed and accessible
+- [RAG AI quickstart (based on NVIDIA RAG Blueprint)](https://docs.redhat.com/en/learn/ai-quickstarts/rh-aml-rag-nvidia) deployed and accessible
 - RAG server URLs (query and ingestion endpoints)
 - API keys: `TAVILY_API_KEY` (optional), `SERPER_API_KEY` (optional)
 
@@ -198,7 +194,7 @@ cd deploy/helm
 # Update chart dependencies
 helm dependency update deployment-k8s/
 
-# Install with vLLM + RAG Blueprint configuration (pre-configured for vllm-models chart)
+# Install with vLLM + RAG AI quickstart configuration (pre-configured for vllm-models chart)
 helm upgrade --install aiq deployment-k8s/ \
   -n ns-aiq --create-namespace \
   -f values-vllm-frag.yaml \
@@ -218,7 +214,7 @@ The `values-vllm-frag.yaml` file is pre-configured for use with the `vllm-models
 - Orchestrator: `http://gpt-oss-120b-predictor.ns-aiq.svc.cluster.local:8080`
 - Summary: `http://nemotron-mini-4b-predictor.ns-aiq.svc.cluster.local:8080`
 
-**RAG endpoints**: Set via command-line (update `<rag-namespace>` to your RAG Blueprint namespace)
+**RAG endpoints**: Set via command-line (update `<rag-namespace>` to your RAG AI quickstart namespace)
 
 **Models served**:
 - Intent: `RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` (30B FP8)
@@ -306,7 +302,7 @@ To upgrade an existing deployment:
 cd deploy/helm
 
 # Pull latest changes
-git pull origin red-hat-v2.1.0
+git pull origin quickstart
 
 # Update dependencies
 helm dependency update deployment-k8s/
