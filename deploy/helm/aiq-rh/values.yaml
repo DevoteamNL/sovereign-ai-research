@@ -33,8 +33,8 @@ apps:
       targetCPUUtilizationPercentage: 80
       targetMemoryUtilizationPercentage: 80
     image:
-      repository: nvcr.io/nvidia/blueprint/aiq-agent
-      tag: "2.1.0"
+      repository: quay.io/tasmith/aiq-backend-redhat
+      tag: "v2.1.0-nv"
       pullPolicy: IfNotPresent
     imagePullSecrets:
       - name: ngc-api
@@ -227,7 +227,7 @@ apps:
       targetCPUUtilizationPercentage: 80
     image:
       repository: quay.io/tasmith/aiq-frontend-redhat
-      tag: "2.1.0"
+      tag: "v2.1.0-nv"
       pullPolicy: IfNotPresent
     imagePullSecrets:
       - name: ngc-api
