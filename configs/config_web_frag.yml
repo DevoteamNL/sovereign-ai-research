@@ -1,7 +1,9 @@
-# This is the default configuration for the Web mode.
+# This is the configuration for the Web mode with Foundational RAG. It is the default configuration for the Helm deployment.
 # It has the following features:
-# - Knowledge retrieval using LlamaIndex
-# - Web search and Paper search tools by default
+# - Web search enabled by default
+# - Knowledge retrieval using Foundational RAG.
+#  Please note that this requires a RAG server and ingest server to be running which is not deployed by this blueprint.
+#  For an example RAG deployment, see https://github.com/NVIDIA-AI-Blueprints/rag/tree/main
 
 general:
   use_uvloop: true
@@ -93,15 +95,6 @@ llms:
   #   chat_template_kwargs:
   #     enable_thinking: true
 
-  # LLM for document summaries (required when generate_summary: true)
-  summary_llm:
-    _type: nim
-    model_name: nvidia/nemotron-mini-4b-instruct
-    base_url: "https://integrate.api.nvidia.com/v1"
-    api_key: ${NVIDIA_API_KEY}
-    temperature: 0.3
-    max_tokens: 100
-
 functions:
   # =========================================================================
   # Data Source Registry
@@ -112,20 +105,9 @@ functions:
   #   3. Tool auto-inheritance — agents with no explicit `tools` list receive
   #      every tool listed here (use `exclude_tools` on agents to specialize)
   #
-  # Adding a new tool or MCP function group? Just add it here — all agents
-  # pick it up automatically. No per-agent config changes needed.
-  #
   # Source entry fields:
-  #   id            — Unique key used in API payloads and filtering
-  #   name          — Display name shown in the UI
-  #   description   — Human-readable description shown in the UI
-  #   tools         — List of NAT function names or function group names
-  #   requires_auth — (default: false) If true, the UI greys out this source
-  #                   until the user signs in. Use for sources that need
-  #                   user-level OAuth tokens (e.g., enterprise SSO).
-  #                   Sources using backend API keys (Tavily, Serper) should
-  #                   leave this false.
-  #   default_enabled — (default: true) Whether enabled by default
+  #   id, name, description, tools, requires_auth (default: false),
+  #   default_enabled (default: true)
   #
   # See docs/source/customization/tools-and-sources.md for full details.
   # =========================================================================
@@ -143,12 +125,6 @@ functions:
         description: "Search uploaded documents and files."
         tools:
           - knowledge_search
-      # Uncomment when paper_search_tool is enabled (requires SERPER_API_KEY)
-      # - id: paper_search
-      #   name: "Academic Papers"
-      #   description: "Search academic papers and scientific publications."
-      #   tools:
-      #     - paper_search_tool
 
   web_search_tool:
     _type: tavily_web_search
@@ -163,13 +139,12 @@ functions:
   # Knowledge Retrieval (see sources/knowledge_layer/KNOWLEDGE-LAYER-SETUP.md)
   knowledge_search:
     _type: knowledge_retrieval
-    backend: llamaindex
+    backend: foundational_rag
     collection_name: ${COLLECTION_NAME:-test_collection}
-    generate_summary: true
-    summary_model: summary_llm                     # Required when generate_summary: true
-    summary_db: ${AIQ_SUMMARY_DB:-sqlite+aiosqlite:///./summaries.db}
     top_k: 5
-    chroma_dir: ${AIQ_CHROMA_DIR:-/tmp/chroma_data}
+    rag_url: ${RAG_SERVER_URL:-http://localhost:8081}
+    ingest_url: ${RAG_INGEST_URL:-http://localhost:8082}
+    timeout: 300
 
   # Paper Search (optional - requires SERPER_API_KEY)
   # Uncomment the block below and set SERPER_API_KEY to enable academic paper search.
@@ -179,19 +154,13 @@ functions:
   #   serper_api_key: ${SERPER_API_KEY}
 
   # =========================================================================
-  # Agents
-  # =========================================================================
-  # Tool inheritance: agents with no `tools` list inherit ALL tools from the
-  # data_source_registry above. Use `exclude_tools` to remove specific tools
-  # from an agent (e.g., give shallow the basic search, deep the advanced).
-  # To bypass auto-inherit entirely, set an explicit `tools` list.
+  # Agents — inherit all registry tools; use exclude_tools to specialize
   # =========================================================================
   intent_classifier:
     _type: intent_classifier
     llm: nemotron_llm_intent
     # tools: omitted -> inherits all from data_source_registry
     # exclude_tools: []
-    verbose: true
 
   clarifier_agent:
     _type: clarifier_agent
@@ -208,9 +177,8 @@ functions:
     _type: shallow_research_agent
     llm: nemotron_nano_llm
     # tools: omitted -> inherits all from data_source_registry
-    exclude_tools:                     # Remove advanced variant; shallow uses web_search_tool
+    exclude_tools:
       - advanced_web_search_tool
-    verbose: true
     max_llm_turns: 10
     max_tool_iterations: 5
 
@@ -220,14 +188,12 @@ functions:
     researcher_llm: nemotron_nano_llm  # replace with nemotron_super_llm if available
     planner_llm: gpt_oss_llm
     # tools: omitted -> inherits all from data_source_registry
-    exclude_tools:                     # Remove basic variant; deep uses advanced_web_search_tool
+    exclude_tools:
       - web_search_tool
     max_loops: 2
-    verbose: true
 
 workflow:
   _type: chat_deepresearcher_agent
-  verbose: true
   enable_escalation: true
   enable_clarifier: true
   use_async_deep_research: true

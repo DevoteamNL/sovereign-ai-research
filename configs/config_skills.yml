@@ -224,6 +224,19 @@ functions:
       - web_search_tool
     max_loops: 2
     verbose: true
+    skills:
+      enabled: true
+    sandbox:
+      provider: modal
+      app_name: aiq-deep-research
+      image: python:3.13-slim
+      python_packages:
+        - matplotlib
+        - numpy
+        - pandas
+        - pillow
+        - tabulate  # required by pandas.DataFrame.to_markdown(), used by data-table-analysis skill
+      block_network: true
 
 workflow:
   _type: chat_deepresearcher_agent
