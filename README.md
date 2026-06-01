@@ -1,4 +1,4 @@
-# Academic Research Assistant on Red Hat AI Factory with NVIDIA
+# Deploy Multi-Agent Research Workflows with Red Hat AI and NVIDIA
 
 Build an academic research agent on Red Hat AI Factory with NVIDIA, powered by vLLM models and platform capabilities for observability, governance, and scale.
 
@@ -319,7 +319,7 @@ What information is in the document I uploaded?
 
 For detailed verification steps and troubleshooting, see the [User Verification Guide](docs/user-docs/user-verification-guide.md).
 
-### Delete
+## Delete
 
 Uninstall the quickstart deployment:
 
