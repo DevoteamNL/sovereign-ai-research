@@ -54,7 +54,7 @@ configMaps:
 Apply changes:
 
 ```bash
-helm upgrade aiq deployment-k8s/ -n ns-aiq -f values-vllm.yaml
+helm upgrade aiq aiq-rh/ -n ns-aiq -f aiq-rh/values-vllm.yaml
 ```
 
 ---
@@ -420,7 +420,7 @@ aiq:
 **6. Deploy:**
 
 ```bash
-helm upgrade --install aiq deployment-k8s/ -n ns-aiq -f values-vllm.yaml
+helm upgrade --install aiq aiq-rh/ -n ns-aiq -f aiq-rh/values-vllm.yaml
 ```
 
 ### Version Alignment Warning

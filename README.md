@@ -75,7 +75,7 @@ When using NVIDIA NGC API for cloud-hosted inference, **no local GPU resources a
 
 #### Storage
 
-**Based on default deployment configuration** ([`deploy/helm/deployment-k8s/values.yaml`](deploy/helm/deployment-k8s/values.yaml)):
+**Based on default deployment configuration** ([`deploy/helm/aiq-rh/values.yaml`](deploy/helm/aiq-rh/values.yaml)):
 
 - **PostgreSQL PersistentVolumeClaim**: 10GB
   - Single PVC (`aiq-postgres-data`) for job metadata, agent checkpoints, and research summaries
@@ -204,10 +204,9 @@ helm install vllm-models vllm-models/ \
 oc get inferenceservices -n ns-aiq -w
 
 # Step 2: Deploy AI-Q application with vLLM configuration
-helm dependency update deployment-k8s/
-helm install aiq deployment-k8s/ \
+helm install aiq aiq-rh/ \
   -n ns-aiq \
-  -f values-vllm.yaml
+  -f aiq-rh/values-vllm.yaml
 
 # Verify deployment
 oc get pods -n ns-aiq
@@ -229,8 +228,7 @@ Use NVIDIA's cloud-hosted model inference without GPU infrastructure.
 cd deploy/helm
 
 # Deploy AI-Q with default NGC configuration
-helm dependency update deployment-k8s/
-helm install aiq deployment-k8s/ \
+helm install aiq aiq-rh/ \
   -n ns-aiq
 
 # Verify deployment
@@ -252,8 +250,8 @@ The NVIDIA AI-Q Blueprint is designed to work optionally with the NVIDIA RAG Blu
 [RAG AI quickstart based on NVIDIA RAG Blueprint](https://docs.redhat.com/en/learn/ai-quickstarts/rh-aml-rag-nvidia)
 
 To integrate with the RAG quickstart, see the full deployment guide for the following configuration options:
-- **Option C:** vLLM + RAG Blueprint (`values-vllm-frag.yaml`)
-- **Option D:** NGC + RAG Blueprint (`values-frag.yaml`)
+- **Option C:** vLLM + RAG Blueprint (`aiq-rh/values-vllm-frag.yaml`)
+- **Option D:** NGC + RAG Blueprint (`aiq-rh/values-frag.yaml`)
 
 See [Deployment Guide](docs/advanced-docs/deployment-guide.md) for complete instructions.
 
@@ -344,7 +342,7 @@ This quickstart focuses on deploying AI-Q on Red Hat OpenShift AI using pre-buil
 ### Quick Configuration Changes
 
 - **Model Selection:** Edit `deploy/helm/vllm-models/values.yaml` to change vLLM models
-- **Agent Behavior:** Modify inline ConfigMaps in values files (e.g., `values-vllm.yaml`)
+- **Agent Behavior:** Modify inline ConfigMaps in values files (e.g., `aiq-rh/values-vllm.yaml`)
 - **Data Sources:** Configure API keys via the `aiq-credentials` secret
 - **RAG Integration:** Update `RAG_SERVER_URL` and `RAG_INGEST_URL` environment variables
 

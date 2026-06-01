@@ -42,12 +42,11 @@ Do you have vLLM server(s) running?
 cd deploy/helm
 
 # Update chart dependencies
-helm dependency update deployment-k8s/
 
 # Install with vLLM configuration (pre-configured for vllm-models chart)
-helm upgrade --install aiq deployment-k8s/ \
+helm upgrade --install aiq aiq-rh/ \
   -n ns-aiq --create-namespace \
-  -f values-vllm.yaml
+  -f aiq-rh/values-vllm.yaml
 
 # Verify
 kubectl get pods -n ns-aiq
@@ -73,9 +72,9 @@ The `values-vllm.yaml` file is pre-configured for use with the `vllm-models` cha
 If using your own vLLM server(s) instead of the vllm-models chart:
 
 ```bash
-helm install aiq deployment-k8s/ \
+helm install aiq aiq-rh/ \
   -n ns-aiq --create-namespace \
-  -f values-vllm.yaml \
+  -f aiq-rh/values-vllm.yaml \
   --set aiq.apps.backend.env.VLLM_BASE_URL=http://your-vllm-server:8000 \
   --set aiq.apps.backend.env.VLLM_ORCHESTRATOR_BASE_URL=http://your-orchestrator-server:8000 \
   --set aiq.apps.backend.env.VLLM_SUMMARY_BASE_URL=http://your-summary-server:8000
@@ -101,11 +100,8 @@ helm install aiq deployment-k8s/ \
 ```bash
 cd deploy/helm
 
-# Update chart dependencies
-helm dependency update deployment-k8s/
-
 # Install with default NGC configuration
-helm upgrade --install aiq deployment-k8s/ \
+helm upgrade --install aiq aiq-rh/ \
   -n ns-aiq --create-namespace
 
 # Verify
@@ -114,7 +110,7 @@ kubectl get pods -n ns-aiq
 
 ### Configuration
 
-The default `deployment-k8s/values.yaml` configures:
+The default `aiq-rh/values.yaml` configures:
 - Config file: `configs/config_web_default_llamaindex.yml` (default)
 - Models used:
   - Intent: `nvidia/nemotron-3-nano-30b-a3b`
@@ -144,12 +140,11 @@ The default `deployment-k8s/values.yaml` configures:
 cd deploy/helm
 
 # Update chart dependencies
-helm dependency update deployment-k8s/
 
 # Install with RAG AI quickstart (based on NVIDIA RAG Blueprint) configuration
-helm upgrade --install aiq deployment-k8s/ \
+helm upgrade --install aiq aiq-rh/ \
   -n ns-aiq --create-namespace \
-  -f values-frag.yaml \
+  -f aiq-rh/values-frag.yaml \
   --set aiq.apps.backend.env.RAG_SERVER_URL=http://rag-server.<rag-namespace>.svc.cluster.local:8081/v1 \
   --set aiq.apps.backend.env.RAG_INGEST_URL=http://ingestor-server.<rag-namespace>.svc.cluster.local:8082/v1
 
@@ -192,12 +187,11 @@ The `values-frag.yaml` file configures:
 cd deploy/helm
 
 # Update chart dependencies
-helm dependency update deployment-k8s/
 
 # Install with vLLM + RAG AI quickstart configuration (pre-configured for vllm-models chart)
-helm upgrade --install aiq deployment-k8s/ \
+helm upgrade --install aiq aiq-rh/ \
   -n ns-aiq --create-namespace \
-  -f values-vllm-frag.yaml \
+  -f aiq-rh/values-vllm-frag.yaml \
   --set aiq.apps.backend.env.RAG_SERVER_URL=http://rag-server.<rag-namespace>.svc.cluster.local:8081/v1 \
   --set aiq.apps.backend.env.RAG_INGEST_URL=http://ingestor-server.<rag-namespace>.svc.cluster.local:8082/v1
 
@@ -304,11 +298,8 @@ cd deploy/helm
 # Pull latest changes
 git pull origin quickstart
 
-# Update dependencies
-helm dependency update deployment-k8s/
-
 # Upgrade (use same values file as original install)
-helm upgrade aiq deployment-k8s/ -n ns-aiq -f <your-values-file.yaml>
+helm upgrade aiq aiq-rh/ -n ns-aiq -f <your-values-file.yaml>
 
 # Force pod restart to pull new images
 kubectl rollout restart deployment -n ns-aiq aiq-backend aiq-frontend

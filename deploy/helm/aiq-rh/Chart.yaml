@@ -1,0 +1,6 @@
+apiVersion: v2
+appVersion: 2.0.0
+description: Red Hat AI-Q Helm Chart
+name: rh-aiq
+type: application
+version: "2.1.0"
