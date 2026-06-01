@@ -59,7 +59,7 @@ This deployment uses **quantized** and smaller-sized models for efficient GPU me
 
 **Optional: Multi-Instance GPU (MIG) optimization**
 
-MIG allows you to partition GPUs into smaller slices, enabling multiple models to share a single GPU efficiently. This can reduce GPU requirements from 3 GPUs down to **2 or even fewer GPUs**.
+MIG allows you to partition GPUs into smaller slices, enabling multiple models to share a single GPU efficiently and reduce overall GPU requirements.
 
 NOTE: MIG examples are based on H100 MIG profiles
 

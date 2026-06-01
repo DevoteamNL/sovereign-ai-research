@@ -11,9 +11,19 @@ general:
         _type: console
         level: INFO
     # tracing:
-    #   langsmith: # Optional: LangSmith tracing - requires langsmith API key. Set using `export LANGSMITH_API_KEY=<your-langsmith-api-key>`
-    #     _type: langsmith
-    #     project: nvidia-aiq
+    #   otel:
+    #     _type: otelcollector_redaction
+    #     endpoint: https://mlflow.redhat-ods-applications.svc.cluster.local:8443/v1/traces
+    #     headers:
+    #       x-mlflow-experiment-id: "1"
+    #     project: aiq-research
+    #     redaction_enabled: true
+    #     redaction_attributes:
+    #       - input.value
+    #       - output.value
+    #       - nat.metadata
+    #     force_redaction: false
+    #     redaction_tag: redacted
 
   front_end:
     _type: aiq_api

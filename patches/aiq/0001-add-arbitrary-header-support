@@ -1,0 +1,20 @@
+diff --git a/src/aiq_agent/observability/otel_header_redaction_exporter.py b/src/aiq_agent/observability/otel_header_redaction_exporter.py
+index 80cbe32..84583b8 100644
+--- a/src/aiq_agent/observability/otel_header_redaction_exporter.py
++++ b/src/aiq_agent/observability/otel_header_redaction_exporter.py
+@@ -78,6 +78,7 @@ class OtelCollectorRedactionTelemetryExporter(
+     name="otelcollector_redaction",
+ ):
+     resource_attributes: dict[str, str] = Field(default_factory=dict, description="Resource attributes to attach.")
++    headers: dict[str, str] = Field(default_factory=dict, description="HTTP headers to send with OTLP requests.")
+ 
+ 
+ @register_telemetry_exporter(config_type=OtelCollectorRedactionTelemetryExporter)
+@@ -97,6 +98,7 @@ async def otelcollector_redaction_telemetry_exporter(
+ 
+     yield OTLPSpanHeaderRedactionAdapterExporter(
+         endpoint=config.endpoint,
++        headers=config.headers,
+         resource_attributes=merged_resource_attributes,
+         batch_size=config.batch_size,
+         flush_interval=config.flush_interval,
