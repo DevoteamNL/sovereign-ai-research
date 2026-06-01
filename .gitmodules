@@ -1,0 +1,3 @@
+[submodule "upstream/aiq"]
+	path = upstream/aiq
+	url = https://github.com/NVIDIA-AI-Blueprints/aiq.git
