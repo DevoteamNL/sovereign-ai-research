@@ -10,6 +10,7 @@ This quickstart deploys AI-Q using pre-built container images on Red Hat OpenShi
 - [Knowledge Layer Configuration](#knowledge-layer-configuration)
 - [Agent Behavior Tuning](#agent-behavior-tuning)
 - [Building Custom Images](#building-custom-images)
+  - [UI Branding Customization](#ui-branding-customization)
 - [Additional Resources](#additional-resources)
 
 ---
@@ -356,7 +357,7 @@ functions:
 
 ## Building Custom Images
 
-For UI customization, agent logic changes, or adding features, you'll need to build custom container images.
+For agent logic changes or adding features, you'll need to build custom container images. However, **UI branding customization can now be done via environment variables** without rebuilding (see [UI Branding Customization](#ui-branding-customization)).
 
 ### Container Images & Versioning
 
@@ -432,6 +433,146 @@ helm upgrade --install aiq aiq-rh/ -n ns-aiq -f aiq-rh/values-vllm.yaml
 - **Repository:** https://github.com/NVIDIA-AI-Blueprints/aiq/tree/v2.1.0
 
 Using a different version may cause incompatibilities.
+
+### UI Branding Customization
+
+**✨ New in this quickstart:** UI branding can be customized via environment variables without rebuilding containers. This includes:
+
+- Application title, description, and favicon
+- Custom fonts (Google Fonts)
+- Logo, brand colors, and name
+- Documentation links
+- Sign-in button styling
+
+All environment variables are optional and default to NVIDIA AI-Q branding.
+
+#### Available Environment Variables
+
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `NEXT_PUBLIC_APP_TITLE` | Browser tab title | `"AI-Q"` | `"Red Hat Research"` |
+| `NEXT_PUBLIC_APP_DESCRIPTION` | Meta description | `"AI-powered research assistant"` | `"Red Hat AI-powered research assistant"` |
+| `NEXT_PUBLIC_FAVICON_PATH` | Favicon path (relative to `public/`) | `"/favicon.ico"` | `"/favicon.svg"` |
+| `NEXT_PUBLIC_FONTS_URL` | Google Fonts URL for custom fonts | None | `"https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;600;700&display=swap"` |
+| `NEXT_PUBLIC_BRAND_NAME` | Brand name in UI and aria-labels | `"NVIDIA"` or `"AI-Q"` | `"Red Hat"` |
+| `NEXT_PUBLIC_BRAND_COLOR` | Primary brand color (hex) | `"#76b900"` | `"#EE0000"` |
+| `NEXT_PUBLIC_LOGO_SVG_PATH` | SVG path data for logo | NVIDIA eye mark | Red Hat fedora paths |
+| `NEXT_PUBLIC_LOGO_VIEWBOX` | SVG viewBox | `"0 0 71 47"` | `"0 0 512 512"` |
+| `NEXT_PUBLIC_DOCS_URL` | Documentation link | `"https://github.com/NVIDIA-AI-Blueprints/aiq"` | `"https://www.redhat.com/en/blog/introducing-ai-quickstarts"` |
+| `NEXT_PUBLIC_SIGNIN_BUTTON_CLASS` | Tailwind classes for sign-in button | `"bg-[#76b900] hover:bg-[#5a8f00]"` | `"bg-[#EE0000] hover:bg-[#CC0000]"` |
+
+#### Example: Red Hat Branding Configuration
+
+**Helm values file (`values-vllm.yaml`):**
+
+```yaml
+aiq:
+  apps:
+    frontend:
+      env:
+        # Application metadata
+        NEXT_PUBLIC_APP_TITLE: "Red Hat Research"
+        NEXT_PUBLIC_APP_DESCRIPTION: "Red Hat AI-powered research assistant"
+        NEXT_PUBLIC_FAVICON_PATH: "/favicon.svg"
+        
+        # Custom fonts
+        NEXT_PUBLIC_FONTS_URL: "https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;600;700&family=Red+Hat+Text:wght@400;500;600;700&display=swap"
+        
+        # Brand identity
+        NEXT_PUBLIC_BRAND_NAME: "Red Hat"
+        NEXT_PUBLIC_BRAND_COLOR: "#EE0000"
+        
+        # Logo (Red Hat fedora - multi-path SVG)
+        NEXT_PUBLIC_LOGO_SVG_PATH: "M341.5 261.1c-1.1-3.6-3.2-7-6.2-9.7l-2.6-2.3c-5.8-5-13.3-7.7-21-7.7h-16.4c-1.4 0-2.7.3-3.9.8l-35.7 15.3c-3.1 1.3-5.1 4.3-5.1 7.7v7.9c0 3.3 2 6.3 5.1 7.6l11.5 4.9c3.1 1.3 5.1 4.3 5.1 7.6v18.6c0 4.6-3.7 8.3-8.3 8.3H196c-4.6 0-8.3 3.7-8.3 8.3v16.6c0 4.6 3.7 8.3 8.3 8.3h67.5c29.8 0 54-24.2 54-54v-9.8c0-2.5-1.1-4.9-3.1-6.5l-9.2-7.6c-1.9-1.6-3.1-3.9-3.1-6.5v-.5c0-2.8 1.4-5.3 3.7-6.8l4.5-2.9c2.3-1.5 3.7-4.1 3.7-6.8v-2.2c0-1.3-.2-2.7-.5-3.8zM459.4 187.5c-25.7-3.3-50.9 2.8-71.4 17.3l-14 9.9c-8.5 6-18.5 9.2-28.8 9.2h-39.9c-6.3 0-12.3 1.5-17.8 4.3l-50.9 25.8c-9.2 4.7-15.1 14.1-15.1 24.5v14.1c0 9.4 4.8 18.2 12.7 23.3l23.7 15.2c2.6 1.7 4.2 4.6 4.2 7.7v30.4c0 15 12.2 27.2 27.2 27.2h30.1c44.7 0 81-36.3 81-81v-13.5c0-3.6-1.7-7-4.5-9.2l-14.6-11.3c-2.8-2.2-4.5-5.6-4.5-9.2v-4.2c0-4.1 2.1-7.9 5.6-10.1l14.7-9.4c5.5-3.5 8.8-9.5 8.8-16v-4.3c0-3.2-.6-6.3-1.8-9.2-2.1-5.2-3.5-10.8-3.8-16.5-.3-4.6 3.7-8.5 8.3-7.9 7.8 1.1 15.4 3.6 22.3 7.6 8.2 4.7 17.7 6.2 27 4.2l.6-.1c8-1.7 14.9-6.7 18.9-13.7 4-7 4.7-15.2 2-22.7-3.2-8.8-10.7-15.1-19.9-16.4z"
+        NEXT_PUBLIC_LOGO_VIEWBOX: "0 0 512 512"
+        
+        # Navigation & actions
+        NEXT_PUBLIC_DOCS_URL: "https://www.redhat.com/en/blog/introducing-ai-quickstarts"
+        NEXT_PUBLIC_SIGNIN_BUTTON_CLASS: "bg-[#EE0000] hover:bg-[#CC0000]"
+```
+
+**Deploy with branding:**
+
+```bash
+helm upgrade --install aiq aiq-rh/ -n ns-aiq -f aiq-rh/values-vllm.yaml
+```
+
+Changes take effect immediately on pod restart (no image rebuild required).
+
+#### Adding Custom Static Assets
+
+For custom favicons or other static assets, build a custom frontend image:
+
+**1. Add files to `upstream/aiq/frontends/ui/public/`:**
+
+```bash
+cd upstream/aiq
+cp ~/my-favicon.svg frontends/ui/public/favicon.svg
+```
+
+**2. Build and push:**
+
+```bash
+docker build -f frontends/ui/Dockerfile \
+  -t your-registry.io/aiq-frontend:custom \
+  frontends/ui/
+
+docker push your-registry.io/aiq-frontend:custom
+```
+
+**3. Update Helm values:**
+
+```yaml
+aiq:
+  apps:
+    frontend:
+      image:
+        repository: your-registry.io/aiq-frontend
+        tag: custom
+      env:
+        NEXT_PUBLIC_FAVICON_PATH: "/favicon.svg"
+```
+
+#### Custom Fonts with Tailwind
+
+When using `NEXT_PUBLIC_FONTS_URL`, you may also want to configure Tailwind to use the custom fonts. This **requires a custom frontend build**.
+
+**Edit `frontends/ui/tailwind.config.ts`:**
+
+```typescript
+export default {
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: ['Red Hat Text', 'sans-serif'],
+        display: ['Red Hat Display', 'sans-serif'],
+      },
+    },
+  },
+}
+```
+
+Then rebuild the frontend image as shown above.
+
+#### Logo Customization Notes
+
+**Multi-path SVGs** (like Red Hat's fedora): Concatenate all `<path>` elements' `d` attribute values. The component automatically splits on 'M' commands.
+
+**Single-path SVGs**: Simply paste the `d` attribute value.
+
+**viewBox**: Match your logo's coordinate system. Use browser dev tools to inspect the original SVG.
+
+#### Implementation Details
+
+UI customization is implemented via patches applied to the upstream AI-Q v2.1.0 source:
+
+- **Patch file:** `patches/aiq/0002-add-env-var-support-for-custom-ui.patch`
+- **Modified files:**
+  - `frontends/ui/src/app/layout.tsx` - Metadata, fonts, favicon
+  - `frontends/ui/src/adapters/ui/Logo.tsx` - Logo rendering
+  - `frontends/ui/src/features/layout/components/AppBar.tsx` - Brand name, docs link, sign-in button
+
+Patches are applied during the container build process. See `patches/aiq/README.md` for patch workflow details.
 
 ---
 
