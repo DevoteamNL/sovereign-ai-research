@@ -463,13 +463,41 @@ All environment variables are optional and default to NVIDIA AI-Q branding.
 
 #### Example: Red Hat Branding Configuration
 
-**Helm values file (`values-vllm.yaml`):**
+**Option 1: Using the dedicated branding file (Recommended)**
+
+A pre-configured `values-branding.yaml` file is provided with Red Hat branding. Use it with any base values file:
+
+```bash
+# With vLLM + LlamaIndex (Option A)
+helm upgrade --install aiq aiq-rh/ -n ns-aiq \
+  -f aiq-rh/values-vllm.yaml \
+  -f aiq-rh/values-branding.yaml
+
+# With NGC + LlamaIndex (Option B)
+helm upgrade --install aiq aiq-rh/ -n ns-aiq \
+  -f aiq-rh/values-branding.yaml
+
+# With vLLM + RAG quickstart (Option C)
+helm upgrade --install aiq aiq-rh/ -n ns-aiq \
+  -f aiq-rh/values-vllm-frag.yaml \
+  -f aiq-rh/values-branding.yaml
+
+# With NGC + RAG quickstart (Option D)
+helm upgrade --install aiq aiq-rh/ -n ns-aiq \
+  -f aiq-rh/values-frag.yaml \
+  -f aiq-rh/values-branding.yaml
+```
+
+The `values-branding.yaml` file contains all Red Hat UI customization environment variables. Later `-f` files merge on top of earlier ones, so branding variables are added without overwriting base configuration.
+
+**Option 2: Inline in your values file**
+
+Add directly to `values-vllm.yaml` (or any other base values file):
 
 ```yaml
-aiq:
-  apps:
-    frontend:
-      env:
+apps:
+  frontend:
+    env:
         # Application metadata
         NEXT_PUBLIC_APP_TITLE: "Red Hat Research"
         NEXT_PUBLIC_APP_DESCRIPTION: "Red Hat AI-powered research assistant"
@@ -491,9 +519,15 @@ aiq:
         NEXT_PUBLIC_SIGNIN_BUTTON_CLASS: "bg-[#EE0000] hover:bg-[#CC0000]"
 ```
 
-**Deploy with branding:**
+**Deploy:**
 
 ```bash
+# Using branding file (recommended)
+helm upgrade --install aiq aiq-rh/ -n ns-aiq \
+  -f aiq-rh/values-vllm.yaml \
+  -f aiq-rh/values-branding.yaml
+
+# Or if added inline to values file
 helm upgrade --install aiq aiq-rh/ -n ns-aiq -f aiq-rh/values-vllm.yaml
 ```
 

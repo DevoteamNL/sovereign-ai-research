@@ -341,6 +341,12 @@ This quickstart focuses on deploying AI-Q on Red Hat OpenShift AI using pre-buil
 
 ### Quick Configuration Changes
 
+- **UI Branding:** Deploy with Red Hat branding using `values-branding.yaml` (no rebuild required)
+  ```bash
+  helm upgrade --install aiq aiq-rh/ -n ns-aiq \
+    -f aiq-rh/values-vllm.yaml \
+    -f aiq-rh/values-branding.yaml
+  ```
 - **Model Selection:** Edit `deploy/helm/vllm-models/values.yaml` to change vLLM models
 - **Agent Behavior:** Modify inline ConfigMaps in values files (e.g., `aiq-rh/values-vllm.yaml`)
 - **Data Sources:** Configure API keys via the `aiq-credentials` secret
