@@ -22,7 +22,7 @@ git am ../../patches/aiq/*.patch
 
 This applies all patches in order:
 1. `0001-Add-arbitrary-header-support-to-OTEL-exporter.patch`
-2. `0002-Add-env-var-support-for-custom-ui.patch`
+2. `0002-Add-runtime-branding-customization-support.patch`
 
 If patch application fails:
 
