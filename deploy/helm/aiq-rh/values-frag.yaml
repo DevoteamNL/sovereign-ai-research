@@ -105,14 +105,41 @@ apps:
               api_key: ${NVIDIA_API_KEY}
               max_retries: 10
           functions:
+            # =========================================================================
+            # Data Source Registry
+            # =========================================================================
+            # Central registry that controls UI toggles and tool auto-inheritance
+            # =========================================================================
+            data_sources:
+              _type: data_source_registry
+              sources:
+                - id: web_search
+                  name: "Web Search"
+                  description: "Search the web for real-time information."
+                  tools:
+                    - web_search_tool
+                    - advanced_web_search_tool
+                - id: knowledge_layer
+                  name: "Knowledge Base"
+                  description: "Search uploaded documents and files."
+                  tools:
+                    - knowledge_search
+                - id: paper_search
+                  name: "Academic Papers"
+                  description: "Search academic papers and scientific publications."
+                  tools:
+                    - paper_search_tool
+
             web_search_tool:
               _type: tavily_web_search
               max_results: 5
               max_content_length: 1000
+
             advanced_web_search_tool:
               _type: tavily_web_search
               max_results: 2
               advanced_search: true
+
             knowledge_search:
               _type: knowledge_retrieval
               backend: foundational_rag
@@ -122,48 +149,54 @@ apps:
               rag_url: ${RAG_SERVER_URL:-http://rag-server.rag.svc.cluster.local:8081/v1}
               ingest_url: ${RAG_INGEST_URL:-http://ingestor-server.rag.svc.cluster.local:8082/v1}
               timeout: 300
+
             paper_search_tool:
               _type: paper_search
               max_results: 5
               serper_api_key: ${SERPER_API_KEY}
+
+            # =========================================================================
+            # Agents
+            # =========================================================================
+            # Tool inheritance: agents with no `tools` list inherit ALL tools from the
+            # data_source_registry above. Use `exclude_tools` to remove specific tools.
+            # =========================================================================
             intent_classifier:
               _type: intent_classifier
               llm: nemotron_llm_intent
-              tools:
-                - web_search_tool
-                - paper_search_tool
-                - knowledge_search
+              # tools: omitted -> inherits all from data_source_registry
+              verbose: true
+
             clarifier_agent:
               _type: clarifier_agent
               llm: nemotron_nano_llm
               planner_llm: nemotron_nano_llm
-              tools:
-                - web_search_tool
-                - paper_search_tool
-                - knowledge_search
+              # tools: omitted -> inherits all from data_source_registry
               max_turns: 3
               enable_plan_approval: true
               log_response_max_chars: 2000
               verbose: true
+
             shallow_research_agent:
               _type: shallow_research_agent
               llm: nemotron_nano_llm
-              tools:
-                - web_search_tool
-                - paper_search_tool
-                - knowledge_search
+              # tools: omitted -> inherits all from data_source_registry
+              exclude_tools:
+                - advanced_web_search_tool  # Remove advanced variant; shallow uses web_search_tool
+              verbose: true
               max_llm_turns: 10
               max_tool_iterations: 5
+
             deep_research_agent:
               _type: deep_research_agent
               orchestrator_llm: gpt_oss_llm
               researcher_llm: nemotron_nano_llm
               planner_llm: gpt_oss_llm
+              # tools: omitted -> inherits all from data_source_registry
+              exclude_tools:
+                - web_search_tool  # Remove basic variant; deep uses advanced_web_search_tool
               max_loops: 2
-              tools:
-                - paper_search_tool
-                - advanced_web_search_tool
-                - knowledge_search
+              verbose: true
           workflow:
             _type: chat_deepresearcher_agent
             enable_escalation: true
