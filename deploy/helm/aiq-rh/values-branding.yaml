@@ -47,15 +47,15 @@ apps:
       # Sign-in Button Styling (Tailwind classes)
       NEXT_PUBLIC_SIGNIN_BUTTON_CLASS: "bg-[#EE0000] hover:bg-[#CC0000]"
 
-# ConfigMaps for static branding assets (favicon)
-configMaps:
-  - name: rh-branding-assets
-    data:
-      favicon.svg: |
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-          <rect width="64" height="64" rx="12" fill="#EE0000"/>
-          <text x="32" y="45" text-anchor="middle" font-family="Red Hat Display, sans-serif" font-weight="700" font-size="38" fill="white">RH</text>
-        </svg>
+    # ConfigMaps for static branding assets (favicon)
+    configMaps:
+      - name: rh-branding-assets
+        data:
+          favicon.svg: |
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+              <rect width="64" height="64" rx="12" fill="#EE0000"/>
+              <text x="32" y="45" text-anchor="middle" font-family="Red Hat Display, sans-serif" font-weight="700" font-size="38" fill="white">RH</text>
+            </svg>
 
 # Notes:
 # - These variables only affect the frontend container

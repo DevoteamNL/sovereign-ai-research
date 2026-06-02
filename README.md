@@ -134,12 +134,7 @@ Obtain the following API keys:
 git clone https://github.com/rh-ai-quickstart/rh-research
 cd rh-research
 git checkout quickstart
-
-# Initialize submodules (if building custom images or wanting to review source code)
-git submodule update --init --recursive
 ```
-
-**Note:** The submodule initialization step is only required if you plan to build custom container images from source. The pre-built images work without submodules.
 
 2. Ensure you are logged into your OpenShift cluster as cluster-admin or namespace admin:
 
