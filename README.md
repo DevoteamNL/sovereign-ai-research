@@ -407,10 +407,9 @@ This AI quickstart is based on the [NVIDIA AI-Q Blueprint](https://github.com/NV
 
 ## Tags
 
-- **Product**: Red Hat OpenShift AI
-- **Use case**: Research automation, knowledge synthesis, intelligent information retrieval
-- **Industry**: Cross-industry
-- **Models**: NVIDIA Nemotron, GPT-OSS-120B, vLLM-compatible open models
+- **Product**: Red Hat AI Enterprise
+- **Use case**: Academic research
+- **Industry**: Education
 
 
 
