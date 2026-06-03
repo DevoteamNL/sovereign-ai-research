@@ -1,0 +1,5 @@
+apiVersion: v2
+name: mlflow
+version: 1.0.0
+description: MLflow tracking server for OpenShift AI
+type: application

@@ -1,0 +1,33 @@
+# MLflow instance configuration
+mlflow:
+  # Whether to create the MLflow CR
+  create: true
+
+  # Name of the MLflow instance
+  name: mlflow
+
+  # Namespace where MLflow will be deployed
+  namespace: redhat-ods-applications
+
+  # MLflow CR spec
+  spec:
+    # Storage configuration
+    storage:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+
+    # Backend store URI (metadata storage)
+    backendStoreUri: "sqlite:////mlflow/mlflow.db"
+
+    # Artifacts destination (model artifacts storage)
+    artifactsDestination: "file:///mlflow/artifacts"
+
+    # Enable artifact serving
+    serveArtifacts: true
+
+    # Image configuration
+    image:
+      imagePullPolicy: IfNotPresent
