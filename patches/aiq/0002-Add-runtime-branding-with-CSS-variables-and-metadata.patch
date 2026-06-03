@@ -1,0 +1,383 @@
+From 3180e165440b9ee8e04cab1cf21e6482def1e535 Mon Sep 17 00:00:00 2001
+From: taylorjordanNC <taylorjordansmith@gmail.com>
+Date: Wed, 3 Jun 2026 12:00:00 -0400
+Subject: [PATCH] Add runtime branding with CSS variables and metadata support
+ - testing implementation
+
+---
+ frontends/ui/src/adapters/ui/Logo.tsx         |  44 +++--
+ frontends/ui/src/app/globals.css              |  28 +--
+ frontends/ui/src/app/layout.tsx               |   6 +-
+ .../src/features/layout/components/AppBar.tsx |   8 +-
+ frontends/ui/src/shared/hooks/useBranding.ts  | 172 ++++++++++++++++++
+ 5 files changed, 222 insertions(+), 36 deletions(-)
+ create mode 100644 frontends/ui/src/shared/hooks/useBranding.ts
+
+diff --git a/frontends/ui/src/adapters/ui/Logo.tsx b/frontends/ui/src/adapters/ui/Logo.tsx
+index 3330a62..34a4e7a 100644
+--- a/frontends/ui/src/adapters/ui/Logo.tsx
++++ b/frontends/ui/src/adapters/ui/Logo.tsx
+@@ -2,16 +2,21 @@
+ // SPDX-License-Identifier: Apache-2.0
+ 
+ /**
+- * Logo Component Shim
++ * Logo Component
+  *
+- * Replaces the internal @kui/foundations-react Logo component which is
+- * not available in the public @nvidia/foundations-react-core package.
+- * Renders the NVIDIA eye mark as an inline SVG.
++ * Renders a brand logo as an inline SVG with runtime branding support.
+  *
+- * The fill color is always NVIDIA green (#76b900), hardcoded in the SVG.
++ * Branding is loaded from /branding/branding.json at runtime, allowing
++ * deployment-time customization without rebuilding the frontend image.
++ * Falls back to NVIDIA branding when no custom branding is deployed.
++ *
++ * See useBranding hook for customization documentation.
+  */
+ 
++'use client'
++
+ import { type FC } from 'react'
++import { useBranding } from '@/shared/hooks/useBranding'
+ 
+ interface LogoProps {
+   /** 'horizontal' renders a wider logo; 'logo-only' renders the eye mark */
+@@ -27,7 +32,7 @@ const fullSizeMap = {
+   large: { width: 160, height: 88 },
+ } as const
+ 
+-/** Dimensions when showing just the eye */
++/** Dimensions when showing just the eye/mark */
+ const eyeSizeMap = {
+   small: { width: 28, height: 28 },
+   medium: { width: 40, height: 40 },
+@@ -35,14 +40,22 @@ const eyeSizeMap = {
+ } as const
+ 
+ /**
+- * Renders the NVIDIA logo as an inline SVG.
+- *
+- * The fill color is always NVIDIA green (#76b900), driven by the
+- * CSS variable `--nv-logo-image-color` set on `:root` in globals.css.
++ * Splits multi-path SVG data by 'M' commands (new path start).
++ * Handles logos with multiple <path> elements (e.g., Red Hat fedora).
++ */
++const splitSvgPaths = (pathData: string): string[] => {
++  return pathData.split(/(?=M)/).filter((p) => p.trim().length > 0)
++}
++
++/**
++ * Renders the brand logo as an inline SVG.
++ * Logo content is determined by runtime branding configuration.
+  */
+ export const Logo: FC<LogoProps> = ({ kind = 'horizontal', size = 'medium', className }) => {
++  const branding = useBranding()
+   const isEyeOnly = kind === 'logo-only'
+   const dims = isEyeOnly ? eyeSizeMap[size] : fullSizeMap[size]
++  const paths = splitSvgPaths(branding.logoSvgPath)
+ 
+   return (
+     <span
+@@ -51,16 +64,15 @@ export const Logo: FC<LogoProps> = ({ kind = 'horizontal', size = 'medium', clas
+     >
+       <svg
+         xmlns="http://www.w3.org/2000/svg"
+-        viewBox="0 0 71 47"
++        viewBox={branding.logoViewBox}
+         width={dims.width}
+         height={dims.height}
+-        aria-label="NVIDIA"
++        aria-label={branding.brandName}
+         role="img"
+       >
+-        <path
+-          d="M7.255 20.234s6.419-9.476 19.236-10.455V6.34C12.294 7.481 0 19.51 0 19.51s6.963 20.138 26.491 21.982v-3.655C12.161 36.032 7.255 20.234 7.255 20.234zM26.49 30.57v3.346c-10.83-1.931-13.837-13.194-13.837-13.194s5.2-5.764 13.837-6.698v3.672l-.016-.002c-4.532-.544-8.074 3.692-8.074 3.692s1.984 7.131 8.09 9.184zm0-30.57v6.341c.417-.033.834-.06 1.253-.074 16.14-.544 26.658 13.242 26.658 13.242s-12.08 14.694-24.663 14.694c-1.153 0-2.234-.107-3.248-.287v3.92a21.24 21.24 0 002.704.176c11.71 0 20.18-5.982 28.38-13.063 1.359 1.089 6.925 3.738 8.07 4.9-7.797 6.529-25.968 11.792-36.27 11.792-.993 0-1.947-.06-2.884-.15V47H71V0H26.491zm0 14.024V9.78c.412-.03.829-.052 1.253-.065 11.607-.365 19.222 9.977 19.222 9.977S38.742 31.12 29.923 31.12c-1.27 0-2.407-.205-3.432-.55V17.697c4.52.546 5.428 2.543 8.145 7.073l6.042-5.096s-4.41-5.787-11.845-5.787c-.81 0-1.583.057-2.342.138z"
+-          fill="#76b900"
+-        />
++        {paths.map((pathData, idx) => (
++          <path key={idx} d={pathData} fill={branding.brandColor} />
++        ))}
+       </svg>
+     </span>
+   )
+diff --git a/frontends/ui/src/app/globals.css b/frontends/ui/src/app/globals.css
+index 0d381e5..67eb1e7 100644
+--- a/frontends/ui/src/app/globals.css
++++ b/frontends/ui/src/app/globals.css
+@@ -23,21 +23,21 @@
+    Values match the canonical KUI hex palette from @kui/foundations-design-tokens.
+    ============================================================================= */
+ 
+-/* Green palette — used by theme tokens below via var() */
++/* Brand color palette — useBranding() hook injects --brand-color-override at runtime */
+ :root {
+-  --color-brand: #76b900;
+-  --color-green-025: #dafb7d;
+-  --color-green-050: #cfff40;
+-  --color-green-100: #bff230;
+-  --color-green-200: #a5de15;
+-  --color-green-300: #76b900;
+-  --color-green-400: #549a00;
+-  --color-green-500: #3f8500;
+-  --color-green-600: #327100;
+-  --color-green-700: #265600;
+-  --color-green-800: #193800;
+-  --color-green-900: #142700;
+-  --color-green-950: #0d1a00;
++  --color-brand: var(--brand-color-override, #76b900);
++  --color-green-025: var(--brand-color-override, #dafb7d);
++  --color-green-050: var(--brand-color-override, #cfff40);
++  --color-green-100: var(--brand-color-override, #bff230);
++  --color-green-200: var(--brand-color-override, #a5de15);
++  --color-green-300: var(--brand-color-override, #76b900);
++  --color-green-400: var(--brand-color-hover-override, #549a00);
++  --color-green-500: var(--brand-color-hover-override, #3f8500);
++  --color-green-600: var(--brand-color-hover-override, #327100);
++  --color-green-700: var(--brand-color-hover-override, #265600);
++  --color-green-800: var(--brand-color-hover-override, #193800);
++  --color-green-900: var(--brand-color-hover-override, #142700);
++  --color-green-950: var(--brand-color-hover-override, #0d1a00);
+ }
+ 
+ /* Light theme brand tokens — per KUI spec */
+diff --git a/frontends/ui/src/app/layout.tsx b/frontends/ui/src/app/layout.tsx
+index 38ff095..b857e05 100644
+--- a/frontends/ui/src/app/layout.tsx
++++ b/frontends/ui/src/app/layout.tsx
+@@ -21,10 +21,10 @@ import { isAuthRequired, AUTH_PROVIDER_ID, TOKEN_REFRESH_BUFFER_SECONDS } from '
+ import './globals.css'
+ 
+ export const metadata: Metadata = {
+-  title: 'AI-Q',
+-  description: 'AI-powered research assistant',
++  title: process.env.NEXT_PUBLIC_APP_TITLE || 'AI-Q',
++  description: process.env.NEXT_PUBLIC_APP_DESCRIPTION || 'AI-powered research assistant',
+   icons: {
+-    icon: '/favicon.ico',
++    icon: process.env.NEXT_PUBLIC_FAVICON_PATH || '/favicon.ico',
+   },
+ }
+ 
+diff --git a/frontends/ui/src/features/layout/components/AppBar.tsx b/frontends/ui/src/features/layout/components/AppBar.tsx
+index bcceeed..81a5996 100644
+--- a/frontends/ui/src/features/layout/components/AppBar.tsx
++++ b/frontends/ui/src/features/layout/components/AppBar.tsx
+@@ -19,6 +19,7 @@ import { type FC, memo, useCallback, useState } from 'react'
+ import { Flex, Text, Button, Logo, Avatar, Popover, Divider } from '@/adapters/ui'
+ import { Menu, Globe, Settings, Book, Lock, Logout, ChevronRight, Info } from '@/adapters/ui/icons'
+ import { useLayoutStore } from '../store'
++import { useBranding } from '@/shared/hooks/useBranding'
+ 
+ interface AppBarProps {
+   /** Current session title to display */
+@@ -59,6 +60,7 @@ export const AppBar: FC<AppBarProps> = memo(function AppBar({
+ }) {
+   const toggleSessionsPanel = useLayoutStore((s) => s.toggleSessionsPanel)
+   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
++  const branding = useBranding()
+ 
+   const handleMenuClick = useCallback(() => {
+     if (!isAuthenticated) return
+@@ -86,8 +88,8 @@ export const AppBar: FC<AppBarProps> = memo(function AppBar({
+   }, [isAuthenticated])
+ 
+   const handleDocsClick = useCallback(() => {
+-    window.open('https://github.com/NVIDIA-AI-Blueprints/aiq', '_blank')
+-  }, [])
++    window.open(branding.docsUrl, '_blank')
++  }, [branding.docsUrl])
+ 
+   const handleNewSessionClick = useCallback(() => {
+     if (!isAuthenticated || isNewSessionDisabled) return
+@@ -120,7 +122,7 @@ export const AppBar: FC<AppBarProps> = memo(function AppBar({
+               <Logo kind="logo-only" size="small" />
+ 
+               <Text kind="label/semibold/lg" className="text-primary whitespace-nowrap">
+-                AI-Q
++                {branding.brandName}
+               </Text>
+             </Flex>
+           </Button>
+diff --git a/frontends/ui/src/shared/hooks/useBranding.ts b/frontends/ui/src/shared/hooks/useBranding.ts
+new file mode 100644
+index 0000000..e8845ef
+--- /dev/null
++++ b/frontends/ui/src/shared/hooks/useBranding.ts
+@@ -0,0 +1,172 @@
++// SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++// SPDX-License-Identifier: Apache-2.0
++
++/**
++ * Runtime Branding Customization Hook
++ *
++ * Enables deployment-time UI branding customization without rebuilding the frontend image.
++ *
++ * ## How it works
++ *
++ * 1. Attempts to fetch `/branding/branding.json` at runtime
++ * 2. Falls back to NVIDIA AI-Q defaults if the file doesn't exist (404)
++ * 3. Caches the result to avoid repeated fetches
++ * 4. Injects CSS variables (--brand-color-override) for theme colors
++ *
++ * ## Deployment customization
++ *
++ * To customize branding at deployment time:
++ *
++ * 1. Create a ConfigMap with your branding.json:
++ *    ```yaml
++ *    configMaps:
++ *      - name: custom-branding
++ *        data:
++ *          branding.json: |
++ *            {
++ *              "brandName": "Your Company",
++ *              "brandColor": "#FF0000",
++ *              "logoSvgPath": "M10 10 L90 90...",
++ *              "logoViewBox": "0 0 100 100",
++ *              "docsUrl": "https://your-company.com/docs"
++ *            }
++ *    ```
++ *
++ * 2. Mount the ConfigMap to /app/public/branding/:
++ *    ```yaml
++ *    volumeMounts:
++ *      - name: custom-branding
++ *        mountPath: /app/public/branding
++ *        readOnly: true
++ *    volumes:
++ *      - name: custom-branding
++ *        configMap:
++ *          name: custom-branding
++ *    ```
++ *
++ * 3. Deploy - branding changes immediately without image rebuild
++ *
++ * ## Available branding fields
++ *
++ * All fields are optional. Omit any field to use the NVIDIA default.
++ *
++ * - `brandName`: Company/product name (default: "NVIDIA" or "AI-Q")
++ * - `brandColor`: Primary brand color hex (default: "#76b900")
++ * - `logoSvgPath`: SVG path data for logo (default: NVIDIA eye mark)
++ * - `logoViewBox`: SVG viewBox (default: "0 0 71 47")
++ * - `docsUrl`: Documentation link (default: NVIDIA AI-Q GitHub)
++ * - `signinButtonClass`: Tailwind classes for sign-in button (default: NVIDIA green)
++ * - `fontsUrl`: Google Fonts URL (optional)
++ */
++
++'use client'
++
++import { useState, useEffect } from 'react'
++
++export interface BrandingConfig {
++  brandName?: string
++  brandColor?: string
++  logoSvgPath?: string
++  logoViewBox?: string
++  docsUrl?: string
++  signinButtonClass?: string
++  fontsUrl?: string
++}
++
++const DEFAULT_NVIDIA_BRANDING: Required<BrandingConfig> = {
++  brandName: 'NVIDIA',
++  brandColor: '#76b900',
++  logoSvgPath:
++    'M7.255 20.234s6.419-9.476 19.236-10.455V6.34C12.294 7.481 0 19.51 0 19.51s6.963 20.138 26.491 21.982v-3.655C12.161 36.032 7.255 20.234 7.255 20.234zM26.49 30.57v3.346c-10.83-1.931-13.837-13.194-13.837-13.194s5.2-5.764 13.837-6.698v3.672l-.016-.002c-4.532-.544-8.074 3.692-8.074 3.692s1.984 7.131 8.09 9.184zm0-30.57v6.341c.417-.033.834-.06 1.253-.074 16.14-.544 26.658 13.242 26.658 13.242s-12.08 14.694-24.663 14.694c-1.153 0-2.234-.107-3.248-.287v3.92a21.24 21.24 0 002.704.176c11.71 0 20.18-5.982 28.38-13.063 1.359 1.089 6.925 3.738 8.07 4.9-7.797 6.529-25.968 11.792-36.27 11.792-.993 0-1.947-.06-2.884-.15V47H71V0H26.491zm0 14.024V9.78c.412-.03.829-.052 1.253-.065 11.607-.365 19.222 9.977 19.222 9.977S38.742 31.12 29.923 31.12c-1.27 0-2.407-.205-3.432-.55V17.697c4.52.546 5.428 2.543 8.145 7.073l6.042-5.096s-4.41-5.787-11.845-5.787c-.81 0-1.583.057-2.342.138z',
++  logoViewBox: '0 0 71 47',
++  docsUrl: 'https://github.com/NVIDIA-AI-Blueprints/aiq',
++  signinButtonClass: 'bg-[#76b900] hover:bg-[#5a8f00]',
++  fontsUrl: '',
++}
++
++let cachedBranding: Required<BrandingConfig> | null = null
++let fetchPromise: Promise<Required<BrandingConfig>> | null = null
++
++/**
++ * Darken a hex color by a percentage (for hover states)
++ */
++function darkenColor(hex: string, percent: number): string {
++  const num = parseInt(hex.replace('#', ''), 16)
++  const r = Math.max(0, Math.floor(((num >> 16) & 255) * (1 - percent)))
++  const g = Math.max(0, Math.floor(((num >> 8) & 255) * (1 - percent)))
++  const b = Math.max(0, Math.floor((num & 255) * (1 - percent)))
++  return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')
++}
++
++async function fetchBranding(): Promise<Required<BrandingConfig>> {
++  if (cachedBranding) {
++    return cachedBranding
++  }
++
++  if (fetchPromise) {
++    return fetchPromise
++  }
++
++  fetchPromise = (async () => {
++    try {
++      const response = await fetch('/branding/branding.json', {
++        cache: 'no-store',
++      })
++
++      if (!response.ok) {
++        // 404 is expected when no custom branding is deployed
++        if (response.status === 404) {
++          console.log('No custom branding found, using NVIDIA defaults')
++          cachedBranding = DEFAULT_NVIDIA_BRANDING
++          return cachedBranding
++        }
++        throw new Error(`Failed to fetch branding: ${response.status}`)
++      }
++
++      const customBranding = (await response.json()) as BrandingConfig
++
++      // Merge custom branding with defaults
++      cachedBranding = {
++        ...DEFAULT_NVIDIA_BRANDING,
++        ...customBranding,
++      }
++
++      console.log('Custom branding loaded:', cachedBranding.brandName)
++      return cachedBranding
++    } catch (error) {
++      console.warn('Failed to load custom branding, using defaults:', error)
++      cachedBranding = DEFAULT_NVIDIA_BRANDING
++      return cachedBranding
++    } finally {
++      fetchPromise = null
++    }
++  })()
++
++  return fetchPromise
++}
++
++/**
++ * Hook to access runtime branding configuration
++ *
++ * @returns Branding configuration (merged custom + defaults)
++ */
++export function useBranding(): Required<BrandingConfig> {
++  const [branding, setBranding] = useState<Required<BrandingConfig>>(DEFAULT_NVIDIA_BRANDING)
++
++  useEffect(() => {
++    fetchBranding().then((brandConfig) => {
++      setBranding(brandConfig)
++
++      // Inject CSS variables for brand colors
++      if (typeof document !== 'undefined') {
++        const brandColor = brandConfig.brandColor
++        const hoverColor = darkenColor(brandColor, 0.15) // 15% darker
++
++        document.documentElement.style.setProperty('--brand-color-override', brandColor)
++        document.documentElement.style.setProperty('--brand-color-hover-override', hoverColor)
++      }
++    })
++  }, [])
++
++  return branding
++}
+-- 
+2.39.5 (Apple Git-154)
+
