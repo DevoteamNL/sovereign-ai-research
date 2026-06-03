@@ -357,14 +357,16 @@ functions:
 
 ## Building Custom Images
 
-For agent logic changes or adding features, you'll need to build custom container images. However, **UI branding customization can now be done via environment variables** without rebuilding (see [UI Branding Customization](#ui-branding-customization)).
+For agent logic changes or adding features, you'll need to build custom container images. Pre-built images include Red Hat-specific patches - start from the same baseline to maintain compatibility.
 
 ### Container Images & Versioning
 
-This quickstart is based on **NVIDIA AI-Q Blueprint v2.1.0**:
+This quickstart is based on **NVIDIA AI-Q Blueprint v2.1.0** with Red Hat patches:
 
-- **Backend:** [NVIDIA AI-Q v2.1.0](https://github.com/NVIDIA-AI-Blueprints/aiq/tree/v2.1.0)
-- **Frontend:** [NVIDIA AI-Q v2.1.0](https://github.com/NVIDIA-AI-Blueprints/aiq/tree/v2.1.0)
+- **Backend:** v2.1.0 + patch 0001 (OTEL header support)
+- **Frontend:** v2.1.0 + patches 0002-0003 (runtime branding + Red Hat defaults)
+
+See [patches/aiq/README.md](../../patches/aiq/README.md) for patch details.
 
 ### Build Process
 
@@ -375,33 +377,48 @@ git clone -b v2.1.0 https://github.com/NVIDIA-AI-Blueprints/aiq
 cd aiq
 ```
 
-**2. Make your changes:**
+**2. Apply Red Hat patches:**
+
+```bash
+# Apply all patches (recommended - matches pre-built images)
+git am /path/to/rh-research/patches/aiq/*.patch
+
+# Or apply selectively:
+# - 0001: OTEL header support (backend)
+# - 0002: Runtime branding infrastructure (frontend)
+# - 0003: Red Hat default branding (frontend)
+git am /path/to/rh-research/patches/aiq/0001-*.patch  # Backend only
+git am /path/to/rh-research/patches/aiq/0002-*.patch  # Frontend branding
+git am /path/to/rh-research/patches/aiq/0003-*.patch  # Red Hat defaults
+```
+
+**3. Make your additional changes:**
 
 - **UI customization:** Edit `frontends/ui/` (Next.js app)
 - **Agent logic:** Edit `src/aiq_agent/` (Python code)
-- **Branding:** Colors, logos, fonts
+- **Branding:** Modify patch 0003 or add your own patches
 
-**3. Build images:**
+**4. Build images:**
 
 ```bash
 # Backend
-docker build -f deploy/Dockerfile \
+podman build -f deploy/Dockerfile \
   -t your-registry.io/aiq-backend:custom .
 
 # Frontend
-docker build -f frontends/ui/Dockerfile \
+podman build -f frontends/ui/Dockerfile \
   -t your-registry.io/aiq-frontend:custom \
   frontends/ui/
 ```
 
-**4. Push to registry:**
+**5. Push to registry:**
 
 ```bash
-docker push your-registry.io/aiq-backend:custom
-docker push your-registry.io/aiq-frontend:custom
+podman push your-registry.io/aiq-backend:custom
+podman push your-registry.io/aiq-frontend:custom
 ```
 
-**5. Update Helm values:**
+**6. Update Helm values:**
 
 ```yaml
 aiq:
@@ -418,7 +435,7 @@ aiq:
         pullPolicy: Always
 ```
 
-**6. Deploy:**
+**7. Deploy:**
 
 ```bash
 helm upgrade --install aiq aiq-rh/ -n ns-aiq -f aiq-rh/values-vllm.yaml
@@ -470,7 +487,7 @@ apps:
 
 **2. Runtime Branding (ConfigMap with branding.json)**
 
-Loaded at runtime from `/branding/branding.json`. All fields are optional and default to NVIDIA branding:
+Loaded at runtime from `/branding/branding.json`. All fields are optional and default to Red Hat branding:
 
 ```yaml
 configMaps:
@@ -527,14 +544,18 @@ See [values-branding.yaml](deploy/helm/aiq-rh/values-branding.yaml) for a comple
 
 #### Implementation Details
 
-Branding is implemented via patch `0002-Add-runtime-branding-with-CSS-variables-and-metadata.patch`:
+Branding is implemented via two patches applied to the upstream AI-Q v2.1.0 source:
 
+**Patch 0002** - Runtime branding infrastructure (upstream contribution candidate):
 - `frontends/ui/src/shared/hooks/useBranding.ts` - Fetches `/branding/branding.json` at runtime
 - `frontends/ui/src/app/layout.tsx` - Metadata and fonts
 - `frontends/ui/src/adapters/ui/Logo.tsx` - Logo rendering
 - `frontends/ui/src/features/layout/components/AppBar.tsx` - Brand name, docs link, button styling
 
-The patch creates a React hook that fetches branding configuration at runtime and falls back to NVIDIA defaults if not found.
+**Patch 0003** - Red Hat default branding (Red Hat quickstart customization):
+- Sets Red Hat as the default branding instead of NVIDIA
+- Eliminates the flash of NVIDIA branding on page load
+- ConfigMap overrides still work for further customization
 
 See [patches/aiq/README.md](patches/aiq/README.md) for patch workflow details.
 

@@ -9,7 +9,7 @@
 #     -f aiq-rh/values-branding.yaml
 #
 # All branding settings are loaded at runtime from branding.json and default
-# to NVIDIA AI-Q branding when not specified. No container image rebuild needed.
+# to Red Hat branding when not specified (via patch 0003). No container image rebuild needed.
 
 apps:
   frontend:
@@ -54,9 +54,10 @@ apps:
             }
 
 # Notes:
-# - Branding is loaded from /branding/branding.json at runtime (see ConfigMap below)
-# - Changes take effect immediately on pod restart (no image rebuild needed)
-# - All branding settings in branding.json are optional - omit any to use NVIDIA defaults
+# - Branding is loaded from /branding/branding.json at runtime (see ConfigMap above)
+# - Frontend image includes patch 0003 which sets Red Hat as default (no NVIDIA flash on page load)
+# - Changes to this ConfigMap take effect immediately on pod restart (no image rebuild needed)
+# - All branding settings in branding.json are optional - omit any to use Red Hat defaults
 # - Favicon is served from /branding/favicon.svg (mounted via ConfigMap)
-# - See frontends/ui/src/shared/hooks/useBranding.ts in patch 0002 for field documentation
+# - See frontends/ui/src/shared/hooks/useBranding.ts in patches 0002+0003 for implementation
 # - See docs/advanced-docs/customization-reference.md for detailed deployment guide

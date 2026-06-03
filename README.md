@@ -208,10 +208,11 @@ helm install vllm-models vllm-models/ \
 # Wait for InferenceServices to be ready (2-5 minutes for model downloads)
 oc get inferenceservices -n ns-aiq -w
 
-# Step 2: Deploy AI-Q application with vLLM configuration
+# Step 2: Deploy AI-Q application with vLLM configuration and Red Hat branding
 helm install aiq aiq-rh/ \
   -n ns-aiq \
-  -f aiq-rh/values-vllm.yaml
+  -f aiq-rh/values-vllm.yaml \
+  -f aiq-rh/values-branding.yaml
 
 # Verify deployment
 oc get pods -n ns-aiq
@@ -222,6 +223,7 @@ oc get pods -n ns-aiq
 - Embedded LlamaIndex with ChromaDB for document storage
 - Full control over model selection and hosting
 - Data stays within your cluster
+- Red Hat branded UI with custom favicon
 
 ---
 
@@ -232,9 +234,10 @@ Use NVIDIA's cloud-hosted model inference without GPU infrastructure.
 ```bash
 cd deploy/helm
 
-# Deploy AI-Q with default NGC configuration
+# Deploy AI-Q with default NGC configuration and Red Hat branding
 helm install aiq aiq-rh/ \
-  -n ns-aiq
+  -n ns-aiq \
+  -f aiq-rh/values-branding.yaml
 
 # Verify deployment
 oc get pods -n ns-aiq
@@ -245,6 +248,7 @@ oc get pods -n ns-aiq
 - Embedded LlamaIndex with ChromaDB for document storage
 - No GPU infrastructure needed
 - Fastest way to get started
+- Red Hat branded UI with custom favicon
 
 ---
 
@@ -346,12 +350,9 @@ This quickstart focuses on deploying AI-Q on Red Hat OpenShift AI using pre-buil
 
 ### Quick Configuration Changes
 
-- **UI Branding:** Deploy with Red Hat branding using `values-branding.yaml` (no rebuild required)
-  ```bash
-  helm upgrade --install aiq aiq-rh/ -n ns-aiq \
-    -f aiq-rh/values-vllm.yaml \
-    -f aiq-rh/values-branding.yaml
-  ```
+- **UI Branding:** Pre-built images include Red Hat branding by default. The main install commands use `values-branding.yaml` to add a custom favicon and demonstrate runtime branding customization. You may edit this file to change colors, logos, or text for custom demos without rebuilding images.
+
+  See [Customization Reference](docs/advanced-docs/customization-reference.md) for branding details.
 - **Model Selection:** Edit `deploy/helm/vllm-models/values.yaml` to change vLLM models
 - **Agent Behavior:** Modify inline ConfigMaps in values files (e.g., `aiq-rh/values-vllm.yaml`)
 - **Data Sources:** Configure API keys via the `aiq-credentials` secret
@@ -359,23 +360,26 @@ This quickstart focuses on deploying AI-Q on Red Hat OpenShift AI using pre-buil
 
 ### Building from Source
 
-For UI customization, agent logic changes, or adding features:
+Pre-built container images include Red Hat-specific patches applied to the upstream AI-Q v2.1.0 source. To build custom images with your own modifications, see [Customization Reference](docs/advanced-docs/customization-reference.md) for:
 
-1. Work within our `red-hat-v2.1.0` branch, containing all of the upstream source code in addition to UI customizations. Or alternatively, clone the upstream repository: `git clone https://github.com/NVIDIA-AI-Blueprints/aiq` 
-2. Make your changes to `frontends/ui/` (UI) or `src/aiq_agent/` (backend)
-3. Build custom container images
-4. Update Helm values to use your custom images
+- Patch workflow and application
+- Building custom frontend/backend images
+- Model selection and configuration
+- Agent behavior tuning
 
-**Full details:** See [docs/advanced-docs/customization-reference.md](docs/advanced-docs/customization-reference.md) for step-by-step guidance.
+The customization guide provides step-by-step instructions for working with the source code and patches.
 
 ### Container Images & Versioning
 
-This quickstart is based on **NVIDIA AI-Q Blueprint v2.1.0** with Red Hat-specific enhancements. The deployment uses pre-built container images:
+This quickstart is based on **NVIDIA AI-Q Blueprint v2.1.0** with Red Hat-specific patches. The deployment uses pre-built container images:
 
-- **Backend:** Based on [NVIDIA AI-Q v2.1.0](https://github.com/NVIDIA-AI-Blueprints/aiq/tree/v2.1.0) with Red Hat branding and vLLM integration
-- **Frontend:** Based on [NVIDIA AI-Q v2.1.0](https://github.com/NVIDIA-AI-Blueprints/aiq/tree/v2.1.0) with Red Hat branding
+- **Backend:** `quay.io/tasmith/aiq-backend-redhat:v2.1.0-nv`  
+  NVIDIA AI-Q v2.1.0
+  
+- **Frontend:** `quay.io/tasmith/aiq-frontend-redhat:2.1.0`  
+  NVIDIA AI-Q v2.1.0 + patches 0002-0003 (runtime branding + Red Hat defaults)
 
-**What's different from upstream?** See our [Fork Customizations](docs/advanced-docs/fork.md) for a detailed explanation of Red Hat-specific changes.
+Patches are maintained in [`patches/aiq/`](patches/aiq/) and applied during the container build process. See [Customization Reference](docs/advanced-docs/customization-reference.md) for patch details and build instructions.
 
 **Additional Resources:**
 - [Deployment Guide](docs/advanced-docs/deployment-guide.md) - All four deployment options (vLLM, NGC, RAG AI quickstart)
@@ -395,8 +399,9 @@ This quickstart is based on **NVIDIA AI-Q Blueprint v2.1.0** with Red Hat-specif
 
 This AI quickstart is based on the [NVIDIA AI-Q Blueprint](https://github.com/NVIDIA-AI-Blueprints/aiq), which is licensed under the **Apache License 2.0**. This repository contains Red Hat-specific customizations and deployment configurations for the upstream AI-Q project.
 
-- **Project License:** See [licenses/LICENSE](licenses/LICENSE) for the Apache License 2.0 text
+- **AI-Q Project License:** See [licenses/LICENSE](licenses/LICENSE) for the Apache License 2.0 text
 - **Third-Party Dependencies:** See [licenses/LICENSE-THIRD-PARTY](licenses/LICENSE-THIRD-PARTY) for all third-party software licenses
+- **Deployment and Patch Code:** See [LICENSE](LICENSE) for license content related to the custom code within this repository.
 
 **Note:** This is not the official NVIDIA AI-Q Blueprint repository. For the upstream project, see [NVIDIA-AI-Blueprints/aiq](https://github.com/NVIDIA-AI-Blueprints/aiq).
 

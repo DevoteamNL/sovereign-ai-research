@@ -227,7 +227,7 @@ apps:
       targetCPUUtilizationPercentage: 80
     image:
       repository: quay.io/tasmith/aiq-frontend-redhat
-      tag: "v2.1.0-nv"
+      tag: "2.1.0"
       pullPolicy: IfNotPresent
     imagePullSecrets:
       - name: ngc-api
