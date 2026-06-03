@@ -2,7 +2,6 @@ From 3180e165440b9ee8e04cab1cf21e6482def1e535 Mon Sep 17 00:00:00 2001
 From: taylorjordanNC <taylorjordansmith@gmail.com>
 Date: Wed, 3 Jun 2026 12:00:00 -0400
 Subject: [PATCH] Add runtime branding with CSS variables and metadata support
- - testing implementation
 
 ---
  frontends/ui/src/adapters/ui/Logo.tsx         |  44 +++--

@@ -22,7 +22,8 @@ git am ../../patches/aiq/*.patch
 
 This applies all patches in order:
 1. `0001-Add-arbitrary-header-support-to-OTEL-exporter.patch`
-2. `0002-Add-runtime-branding-customization-support.patch`
+2. `0002-Add-runtime-branding-with-CSS-variables-and-metadata.patch`
+3. `0003-Set-Red-Hat-as-default-branding-for-quickstart.patch`
 
 If patch application fails:
 
@@ -30,9 +31,17 @@ If patch application fails:
 git am --abort
 ```
 
+## Patch Descriptions
+
+- **0001** - Adds arbitrary header support to OTEL exporter (upstream contribution candidate)
+- **0002** - Runtime branding infrastructure with ConfigMap support (upstream contribution candidate)
+- **0003** - Red Hat specific branding defaults (Red Hat quickstart customization)
+
 ## Notes
 
 - Patches are numbered to ensure correct application order.
+- Patches 0001-0002 add generic functionality suitable for upstream contribution.
+- Patch 0003 applies Red Hat-specific defaults on top of the generic infrastructure.
 - Use `git format-patch` + `git am` when you want to preserve commit metadata.
 - Use patches primarily for source-level features or fixes pending upstream contribution.
 - Do not commit local AI-Q submodule commits to this repository
