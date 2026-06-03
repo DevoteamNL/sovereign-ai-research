@@ -25,7 +25,9 @@ apps:
           name: rh-branding-assets
 
     env:
-      # Favicon path - this env var is used in metadata and works at runtime
+      # Browser tab metadata (used in layout.tsx)
+      NEXT_PUBLIC_APP_TITLE: "Red Hat Research"
+      NEXT_PUBLIC_APP_DESCRIPTION: "Red Hat AI-powered research assistant"
       NEXT_PUBLIC_FAVICON_PATH: "/branding/favicon.svg"
 
     # ConfigMaps for runtime branding assets (favicon + config)
@@ -42,7 +44,7 @@ apps:
             {
               "appTitle": "Red Hat Research",
               "appDescription": "Red Hat AI-powered research assistant",
-              "brandName": "Red Hat",
+              "brandName": "Red Hat Research",
               "brandColor": "#EE0000",
               "docsUrl": "https://www.redhat.com/en/blog/introducing-ai-quickstarts",
               "signinButtonClass": "bg-[#EE0000] hover:bg-[#CC0000]",
