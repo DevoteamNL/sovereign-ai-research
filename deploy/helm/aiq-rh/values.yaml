@@ -106,7 +106,7 @@ apps:
         name: aiq-config-mlflow
     - name: service-ca
       configMap:
-        name: aiq-service-ca-bundle
+        name: openshift-service-ca.crt
     - name: data-storage
       emptyDir: {}
     volumeMounts:
@@ -148,11 +148,6 @@ apps:
     stdin: false
     tty: false
     podSecurityContext: null
-    configMaps:
-    - name: aiq-service-ca-bundle
-      annotations:
-        service.beta.openshift.io/inject-cabundle: "true"
-      data: {}
     configMaps:
     - name: aiq-config-mlflow
       data:
