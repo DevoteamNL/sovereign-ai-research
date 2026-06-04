@@ -119,9 +119,9 @@ Obtain the following API keys:
 - **NVIDIA_API_KEY** (required for NGC model deployment)
   - Get your API key at: https://org.ngc.nvidia.com/setup/api-key
   - Sign up for NIM access at: https://build.nvidia.com/
-- **TAVILY_API_KEY** (optional but recommended for web search functionality)
+- **TAVILY_API_KEY** (needed for web search functionality)
   - Sign up at: https://tavily.com/
-- **SERPER_API_KEY** (optional for academic paper search via Google Scholar)
+- **SERPER_API_KEY** (for academic paper search via Google Scholar)
   - Sign up at: https://serper.dev/
 
 **Note:** At least one data source (Tavily web search, Serper paper search, or uploaded documents) is required to enable research functionality beyond basic conversational queries.
