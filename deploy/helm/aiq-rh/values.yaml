@@ -82,6 +82,9 @@ apps:
       COLLECTION_NAME: default_collection
       AIQ_CHROMA_DIR: /app/data/chroma
       MODE: web
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/openshift-service-ca.crt
+      SSL_CERT_FILE: /etc/ssl/certs/openshift-service-ca.crt
+      CURL_CA_BUNDLE: /etc/ssl/certs/openshift-service-ca.crt
     labels:
       component: backend
     route:
@@ -101,6 +104,9 @@ apps:
     - name: config-override
       configMap:
         name: aiq-config-mlflow
+    - name: service-ca
+      configMap:
+        name: aiq-service-ca-bundle
     - name: data-storage
       emptyDir: {}
     volumeMounts:
@@ -109,6 +115,10 @@ apps:
     - name: config-override
       mountPath: /app/configs/config_web_default_llamaindex.yml
       subPath: config_web_default_llamaindex.yml
+      readOnly: true
+    - name: service-ca
+      mountPath: /etc/ssl/certs/openshift-service-ca.crt
+      subPath: service-ca.crt
       readOnly: true
     initContainers:
     - name: db-init
@@ -138,6 +148,11 @@ apps:
     stdin: false
     tty: false
     podSecurityContext: null
+    configMaps:
+    - name: aiq-service-ca-bundle
+      annotations:
+        service.beta.openshift.io/inject-cabundle: "true"
+      data: {}
     configMaps:
     - name: aiq-config-mlflow
       data:
