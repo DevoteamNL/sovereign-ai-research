@@ -16,6 +16,8 @@ general:
         endpoint: https://mlflow.redhat-ods-applications.svc.cluster.local:8443/v1/traces
         headers:
           x-mlflow-experiment-id: "1"
+          x-mlflow-workspace: "ns-aiq"
+          Authorization: "Bearer {YOUR_TOKEN_HERE}"
         project: aiq-research
         redaction_enabled: true
         redaction_attributes:

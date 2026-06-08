@@ -1,0 +1,40 @@
+{{- if .Values.apps.backend.enabled }}
+{{- $backendSA := .Values.apps.backend.serviceAccount | default dict }}
+{{- $createSA := $backendSA.create | default false }}
+{{- if $createSA }}
+---
+# Role for MLflow tracing operations
+# Grants minimal permissions needed for the backend to send traces to MLflow
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mlflow-trace-writer
+  namespace: {{ include "aiq.namespace" . }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+    component: mlflow-tracing
+rules:
+# Permissions for accessing MLflow service
+- apiGroups: [mlflow.kubeflow.org]
+  resources: [experiments]
+  verbs: [create, get]
+---
+# RoleBinding to grant the backend service account MLflow trace writing permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "aiq.appFullname" (list . "backend") }}-mlflow-trace-writer
+  namespace: {{ include "aiq.namespace" . }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+    component: mlflow-tracing
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mlflow-trace-writer
+subjects:
+- kind: ServiceAccount
+  name: {{ include "aiq.appFullname" (list . "backend") }}
+  namespace: {{ include "aiq.namespace" . }}
+{{- end }}
+{{- end }}

@@ -85,6 +85,9 @@ apps:
       OTEL_EXPORTER_OTLP_CERTIFICATE: /etc/ssl/certs/openshift-service-ca.crt
     labels:
       component: backend
+    serviceAccount:
+      create: true
+      annotations: {}
     route:
       enabled: true
       host: ""  # Leave empty for auto-generated OpenShift hostname
@@ -168,6 +171,8 @@ apps:
                   endpoint: https://mlflow.redhat-ods-applications.svc.cluster.local:8443/v1/traces
                   headers:
                     x-mlflow-experiment-id: "1"
+                    x-mlflow-workspace: "ns-aiq"
+                    Authorization: "Bearer {YOUR_TOKEN_HERE}"
                   project: aiq-research
                   redaction_enabled: true
                   redaction_attributes:
