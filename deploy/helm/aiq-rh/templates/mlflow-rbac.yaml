@@ -3,29 +3,35 @@
 {{- $createSA := $backendSA.create | default false }}
 {{- if $createSA }}
 ---
-# ClusterRoleBinding to grant the backend service account access to MLflow
-#
-# MLflow resources (mlflows.mlflow.opendatahub.io) are cluster-scoped in OpenDataHub/RHOAI,
-# so a ClusterRoleBinding is required instead of a namespace-scoped RoleBinding.
-#
-# This binding grants the aiq-backend service account the same permissions as the
-# mlflow-sa service account by referencing the 'mlflow' ClusterRole created by the
-# MLflow operator.
-#
-# Required for:
-# - Authenticating with MLflow's kube-rbac-proxy
-# - Sending OTEL traces to MLflow tracking server
+# Role for MLflow integration
+# Grants permissions for the backend to create and manage MLflow experiments
+# in its own namespace when using MLflow's workspace mode
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: Role
 metadata:
-  name: {{ include "aiq.appFullname" (list . "backend") }}-mlflow-access
+  name: {{ include "aiq.appFullname" (list . "backend") }}-mlflow-integration
+  namespace: {{ include "aiq.namespace" . }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+    component: mlflow-tracing
+rules:
+- apiGroups: [mlflow.kubeflow.org]
+  resources: [experiments, datasets, registeredmodels]
+  verbs: [get, list, create, update, patch]
+---
+# RoleBinding to grant the backend service account MLflow integration permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "aiq.appFullname" (list . "backend") }}-mlflow-integration
+  namespace: {{ include "aiq.namespace" . }}
   labels:
     {{- include "aiq.labels" . | nindent 4 }}
     component: mlflow-tracing
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: mlflow
+  kind: Role
+  name: {{ include "aiq.appFullname" (list . "backend") }}-mlflow-integration
 subjects:
 - kind: ServiceAccount
   name: {{ include "aiq.appFullname" (list . "backend") }}
