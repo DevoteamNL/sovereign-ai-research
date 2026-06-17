@@ -7,9 +7,10 @@ namespace: openshift-logging
 # MinIO Object Storage Configuration
 minio:
   # MinIO credentials (demo purposes - use secrets management in production)
+  # Note: username must be at least 3 chars, password at least 8 chars
   credentials:
     username: minio
-    password: minio
+    password: minio123
 
   # Persistent storage for MinIO
   storage:
