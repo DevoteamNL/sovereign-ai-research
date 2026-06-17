@@ -1,0 +1,19 @@
+apiVersion: v2
+name: logging-operator
+description: A Helm chart for OpenShift Logging Operator (cluster-logging)
+type: application
+version: 1.0.0
+appVersion: "6.0.0"
+keywords:
+  - openshift
+  - logging
+  - operator
+  - loki
+  - observability
+home: https://github.com/openshift/cluster-logging-operator
+sources:
+  - https://github.com/openshift/cluster-logging-operator
+annotations:
+  category: Observability
+  openshift.io/display-name: "Red Hat OpenShift Logging"
+  openshift.io/documentation-url: "https://docs.openshift.com/container-platform/latest/observability/logging/cluster-logging.html"
