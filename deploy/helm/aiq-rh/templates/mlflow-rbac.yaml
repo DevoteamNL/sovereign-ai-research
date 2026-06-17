@@ -1,0 +1,40 @@
+{{- if .Values.apps.backend.enabled }}
+{{- $backendSA := .Values.apps.backend.serviceAccount | default dict }}
+{{- $createSA := $backendSA.create | default false }}
+{{- if $createSA }}
+---
+# Role for MLflow integration
+# Grants permissions for the backend to create and manage MLflow experiments
+# in its own namespace when using MLflow's workspace mode
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "aiq.appFullname" (list . "backend") }}-mlflow-integration
+  namespace: {{ include "aiq.namespace" . }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+    component: mlflow-tracing
+rules:
+- apiGroups: [mlflow.kubeflow.org]
+  resources: [experiments, datasets, registeredmodels]
+  verbs: [get, list, create, update, patch]
+---
+# RoleBinding to grant the backend service account MLflow integration permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "aiq.appFullname" (list . "backend") }}-mlflow-integration
+  namespace: {{ include "aiq.namespace" . }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+    component: mlflow-tracing
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "aiq.appFullname" (list . "backend") }}-mlflow-integration
+subjects:
+- kind: ServiceAccount
+  name: {{ include "aiq.appFullname" (list . "backend") }}
+  namespace: {{ include "aiq.namespace" . }}
+{{- end }}
+{{- end }}

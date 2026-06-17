@@ -1,0 +1,26 @@
+{{- if .Values.clusterLogging.namespace.create }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.clusterLogging.namespace.name }}
+  {{- with .Values.clusterLogging.namespace.labels }}
+  labels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.clusterLogging.namespace.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- if .Values.lokiOperator.namespace.create }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.lokiOperator.namespace.name }}
+  {{- with .Values.lokiOperator.namespace.labels }}
+  labels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

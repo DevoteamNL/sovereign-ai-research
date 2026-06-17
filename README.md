@@ -119,9 +119,9 @@ Obtain the following API keys:
 - **NVIDIA_API_KEY** (required for NGC model deployment)
   - Get your API key at: https://org.ngc.nvidia.com/setup/api-key
   - Sign up for NIM access at: https://build.nvidia.com/
-- **TAVILY_API_KEY** (optional but recommended for web search functionality)
+- **TAVILY_API_KEY** (needed for web search functionality)
   - Sign up at: https://tavily.com/
-- **SERPER_API_KEY** (optional for academic paper search via Google Scholar)
+- **SERPER_API_KEY** (for academic paper search via Google Scholar)
   - Sign up at: https://serper.dev/
 
 **Note:** At least one data source (Tavily web search, Serper paper search, or uploaded documents) is required to enable research functionality beyond basic conversational queries.
@@ -284,6 +284,31 @@ oc get pods -n ns-aiq
 - `nemotron-nano-30b-predictor-*` - Intent & researcher model server
 - `nemotron-mini-4b-predictor-*` - Summary model server
 
+#### (Optional) Deploy Observability Stack
+
+Deploy the complete observability stack for monitoring, tracing, logging, and metrics visualization:
+
+```bash
+cd deploy/helm/observability
+chmod +x install-operators.sh deploy.sh
+
+# Step 1: Install operators and wait for CRDs (2-3 minutes)
+./install-operators.sh
+
+# Step 2: Deploy observability resources
+./deploy.sh
+```
+
+This will install:
+- **OpenShift Logging** with LokiStack for centralized log aggregation
+- **Grafana** for metrics visualization and dashboards
+- **OpenTelemetry Collector** for distributed tracing telemetry
+- **User Workload Monitoring** for Prometheus metrics collection
+- **MLflow** for agent tracing
+- **Required operators** (Cluster Observability, Grafana, OpenTelemetry, Logging)
+
+NOTE: For more detailed information on verifying the observability stack deployment and utilizing the resources, review the observability stack guide at docs/advanced-docs/observability-guide.md
+
 ### Using the research assistant AI quickstart
 
 1. Get the frontend URL:
@@ -343,6 +368,35 @@ oc delete pvc --all -n ns-aiq
 # (Optional) Delete the entire namespace
 oc delete namespace ns-aiq
 ```
+
+#### (Optional) Uninstall Observability Stack
+
+If you deployed the observability stack, uninstall it:
+
+```bash
+cd deploy/helm/observability
+chmod +x uninstall.sh
+./uninstall.sh
+```
+
+Or manually uninstall in reverse order (resources first, then operators):
+
+```bash
+# Uninstall observability resources
+helm uninstall mlflow -n observability-hub
+helm uninstall logging-stack -n openshift-logging
+helm uninstall grafana -n observability-hub
+helm uninstall uwm
+helm uninstall otel-collector -n observability-hub
+
+# Uninstall operators (this will also delete their namespaces)
+helm uninstall otel-op
+helm uninstall grafana-op
+helm uninstall cluster-obs
+helm uninstall logging-op
+```
+
+**Note:** Helm will automatically delete namespaces created by the operator charts. Namespaces may take a few minutes to fully terminate.
 
 ## Customization
 

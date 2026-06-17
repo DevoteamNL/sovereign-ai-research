@@ -1,0 +1,77 @@
+# OpenShift Logging Operator configuration
+# Deploys both cluster-logging operator and loki-operator
+
+# Cluster Logging namespace configuration
+clusterLogging:
+  namespace:
+    name: openshift-logging
+    create: true
+    annotations:
+      openshift.io/display-name: "OpenShift Logging"
+    labels: {}
+
+  # Cluster Logging operator subscription
+  subscription:
+    name: cluster-logging
+    packageName: cluster-logging
+    channel: stable-6.2
+    source: redhat-operators
+    sourceNamespace: openshift-marketplace
+    installPlanApproval: Automatic
+    startingCSV: ""
+    labels:
+      operators.coreos.com/cluster-logging.openshift-logging: ''
+
+  # OperatorGroup for cluster-logging
+  operatorGroup:
+    name: openshift-logging
+    upgradeStrategy: Default
+
+# Loki Operator namespace configuration
+lokiOperator:
+  namespace:
+    name: openshift-operators-redhat
+    create: true
+    labels:
+      openshift.io/cluster-monitoring: "true"
+
+  # Loki operator subscription
+  subscription:
+    name: loki-operator
+    packageName: loki-operator
+    channel: stable-6.2
+    source: redhat-operators
+    sourceNamespace: openshift-marketplace
+    installPlanApproval: Automatic
+    startingCSV: ""
+    labels:
+      operators.coreos.com/loki-operator.openshift-operators-redhat: ''
+
+  # OperatorGroup for loki-operator
+  operatorGroup:
+    name: openshift-operators-redhat
+    upgradeStrategy: Default
+
+# Global labels to apply to all resources
+commonLabels: {}
+
+# Global annotations to apply to all resources
+commonAnnotations: {}
+
+# Resource limits and requests (if needed for operator pod)
+resources: {}
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# Node selector for operator pod
+nodeSelector: {}
+
+# Tolerations for operator pod
+tolerations: []
+
+# Affinity for operator pod
+affinity: {}

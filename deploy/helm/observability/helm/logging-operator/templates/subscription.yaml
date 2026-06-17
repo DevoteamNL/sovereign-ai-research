@@ -1,0 +1,38 @@
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: {{ .Values.clusterLogging.subscription.name }}
+  namespace: {{ .Values.clusterLogging.namespace.name }}
+  {{- with .Values.clusterLogging.subscription.labels }}
+  labels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  channel: {{ .Values.clusterLogging.subscription.channel }}
+  installPlanApproval: {{ .Values.clusterLogging.subscription.installPlanApproval }}
+  name: {{ .Values.clusterLogging.subscription.packageName }}
+  source: {{ .Values.clusterLogging.subscription.source }}
+  sourceNamespace: {{ .Values.clusterLogging.subscription.sourceNamespace }}
+  {{- if .Values.clusterLogging.subscription.startingCSV }}
+  startingCSV: {{ .Values.clusterLogging.subscription.startingCSV }}
+  {{- end }}
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: {{ .Values.lokiOperator.subscription.name }}
+  namespace: {{ .Values.lokiOperator.namespace.name }}
+  {{- with .Values.lokiOperator.subscription.labels }}
+  labels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  channel: {{ .Values.lokiOperator.subscription.channel }}
+  installPlanApproval: {{ .Values.lokiOperator.subscription.installPlanApproval }}
+  name: {{ .Values.lokiOperator.subscription.packageName }}
+  source: {{ .Values.lokiOperator.subscription.source }}
+  sourceNamespace: {{ .Values.lokiOperator.subscription.sourceNamespace }}
+  {{- if .Values.lokiOperator.subscription.startingCSV }}
+  startingCSV: {{ .Values.lokiOperator.subscription.startingCSV }}
+  {{- end }}

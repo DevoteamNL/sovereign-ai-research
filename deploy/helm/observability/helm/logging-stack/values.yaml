@@ -1,0 +1,107 @@
+# Logging Stack Configuration
+# Deploys LokiStack with MinIO storage backend for OpenShift
+
+# Global namespace configuration
+namespace: openshift-logging
+
+# MinIO Object Storage Configuration
+minio:
+  # MinIO credentials (demo purposes - use secrets management in production)
+  # Note: username must be at least 3 chars, password at least 8 chars
+  credentials:
+    username: minio
+    password: minio123
+
+  # Persistent storage for MinIO
+  storage:
+    size: 80Gi
+    # Leave empty to use default storage class (nfs-client)
+    storageClassName: ""
+
+  # MinIO resource limits
+  resources:
+    limits:
+      cpu: 250m
+      memory: 1Gi
+    requests:
+      cpu: 20m
+      memory: 100Mi
+
+  # MinIO image
+  image:
+    repository: quay.io/minio/minio
+    tag: RELEASE.2024-06-29T01-20-47Z
+    pullPolicy: IfNotPresent
+
+# Loki Configuration
+loki:
+  # LokiStack size - options: 1x.demo, 1x.extra-small, 1x.small, 1x.medium
+  # 1x.small supports up to 500GB/day of logs
+  size: 1x.small
+
+  # Storage configuration
+  storage:
+    # Storage class for LokiStack components
+    storageClassName: nfs-client
+
+    # S3-compatible storage settings
+    s3:
+      bucketName: loki
+      region: us-east-1
+      # Endpoint is constructed from minio service name
+      # endpoint: http://minio-service.openshift-logging.svc.cluster.local:9000
+
+  # Schema version
+  schema:
+    effectiveDate: '2024-10-01'
+    version: v13
+
+  # Tenant mode for OpenShift
+  tenantMode: openshift-logging
+
+# Log Forwarding Configuration
+logForwarding:
+  # Service account for log collection
+  serviceAccount:
+    name: collector
+
+  # Log pipelines configuration
+  pipelines:
+    # Collect application and infrastructure logs
+    - name: default-logstore
+      inputRefs:
+        - application
+        - infrastructure
+      outputRefs:
+        - default-lokistack
+
+# UI Plugin Configuration
+uiPlugin:
+  enabled: true
+  type: Logging
+
+# RBAC Configuration
+rbac:
+  # Create service accounts and role bindings
+  create: true
+
+  # Service account for log collector
+  collectorServiceAccount: collector
+
+  # ClusterRole bindings to create
+  clusterRoleBindings:
+    - logging-collector-logs-writer
+    - collect-application-logs
+    - collect-audit-logs
+    - collect-infrastructure-logs
+
+# Bucket creation job configuration
+bucketCreation:
+  # Image for the bucket creation job
+  image:
+    repository: quay.io/openshift/origin-cli
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  # Service account for bucket creation job
+  serviceAccount: collector

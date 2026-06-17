@@ -1,0 +1,31 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: logging-loki-s3
+  namespace: {{ .Values.namespace }}
+stringData:
+  access_key_id: {{ .Values.minio.credentials.username }}
+  access_key_secret: {{ .Values.minio.credentials.password }}
+  bucketnames: {{ .Values.loki.storage.s3.bucketName }}
+  endpoint: http://minio-service.{{ .Values.namespace }}.svc.cluster.local:9000
+  region: {{ .Values.loki.storage.s3.region }}
+---
+apiVersion: loki.grafana.com/v1
+kind: LokiStack
+metadata:
+  name: logging-loki
+  namespace: {{ .Values.namespace }}
+spec:
+  managementState: Managed
+  size: {{ .Values.loki.size }}
+  storage:
+    schemas:
+      - effectiveDate: {{ .Values.loki.schema.effectiveDate | quote }}
+        version: {{ .Values.loki.schema.version }}
+    secret:
+      name: logging-loki-s3
+      type: s3
+  storageClassName: {{ .Values.loki.storage.storageClassName }}
+  tenants:
+    mode: {{ .Values.loki.tenantMode }}
