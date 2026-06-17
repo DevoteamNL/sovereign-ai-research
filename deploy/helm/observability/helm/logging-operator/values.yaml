@@ -1,37 +1,56 @@
 # OpenShift Logging Operator configuration
+# Deploys both cluster-logging operator and loki-operator
 
-# Namespace configuration
-namespace:
-  name: openshift-logging
-  create: true
-  annotations:
-    openshift.io/display-name: "OpenShift Logging"
-  labels:
-    openshift.io/cluster-monitoring: 'true'
+# Cluster Logging namespace configuration
+clusterLogging:
+  namespace:
+    name: openshift-logging
+    create: true
+    annotations:
+      openshift.io/display-name: "OpenShift Logging"
+    labels: {}
 
-# Operator subscription configuration
-subscription:
-  # Name of the subscription
-  name: cluster-logging
-  # Package name for the operator
-  packageName: cluster-logging
-  # Channel to subscribe to (stable, stable-6.0, etc.)
-  channel: stable-6.0
-  # Source catalog containing the operator
-  source: redhat-operators
-  # Namespace where the catalog source is located
-  sourceNamespace: openshift-marketplace
-  # Installation plan approval mode
-  installPlanApproval: Automatic
-  # Starting CSV (leave empty for latest)
-  startingCSV: ""
+  # Cluster Logging operator subscription
+  subscription:
+    name: cluster-logging
+    packageName: cluster-logging
+    channel: stable-6.2
+    source: redhat-operators
+    sourceNamespace: openshift-marketplace
+    installPlanApproval: Automatic
+    startingCSV: ""
+    labels:
+      operators.coreos.com/cluster-logging.openshift-logging: ''
 
-# OperatorGroup configuration
-operatorGroup:
-  # Name of the operator group
-  name: cluster-logging
-  # Target namespaces (empty for all namespaces)
-  targetNamespaces: []
+  # OperatorGroup for cluster-logging
+  operatorGroup:
+    name: openshift-logging
+    upgradeStrategy: Default
+
+# Loki Operator namespace configuration
+lokiOperator:
+  namespace:
+    name: openshift-operators-redhat
+    create: true
+    labels:
+      openshift.io/cluster-monitoring: "true"
+
+  # Loki operator subscription
+  subscription:
+    name: loki-operator
+    packageName: loki-operator
+    channel: stable-6.2
+    source: redhat-operators
+    sourceNamespace: openshift-marketplace
+    installPlanApproval: Automatic
+    startingCSV: ""
+    labels:
+      operators.coreos.com/loki-operator.openshift-operators-redhat: ''
+
+  # OperatorGroup for loki-operator
+  operatorGroup:
+    name: openshift-operators-redhat
+    upgradeStrategy: Default
 
 # Global labels to apply to all resources
 commonLabels: {}
