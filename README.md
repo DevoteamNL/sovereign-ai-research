@@ -427,7 +427,7 @@ The customization guide provides step-by-step instructions for working with the 
 
 This quickstart is based on **NVIDIA AI-Q Blueprint v2.1.0** with Red Hat-specific patches. The deployment uses pre-built container images:
 
-- **Backend:** `quay.io/tasmith/aiq-backend-redhat:v2.1.0-nv`  
+- **Backend:** `quay.io/tasmith/aiq-backend-redhat:2.1.0`  
   NVIDIA AI-Q v2.1.0
   
 - **Frontend:** `quay.io/tasmith/aiq-frontend-redhat:2.1.0`  
