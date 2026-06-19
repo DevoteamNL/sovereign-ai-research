@@ -4,7 +4,7 @@ echo "🗑️  Uninstalling Observability Stack..."
 echo ""
 
 echo "📦 Step 1: Uninstalling MLflow..."
-helm uninstall mlflow -n observability-hub 2>/dev/null || echo "   (not installed)"
+helm uninstall mlflow -n redhat-ods-applications 2>/dev/null || echo "   (not installed)"
 echo ""
 
 echo "📦 Step 2: Uninstalling Logging Stack..."

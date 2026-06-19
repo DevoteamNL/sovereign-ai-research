@@ -22,7 +22,7 @@ helm upgrade --install logging-stack helm/logging-stack/ -n openshift-logging
 echo ""
 
 echo "📦 Step 5: Installing MLflow..."
-helm upgrade --install mlflow helm/mlflow/ -n observability-hub
+helm upgrade --install mlflow helm/mlflow/ -n redhat-ods-applications
 echo ""
 
 echo "🎉 Observability resources deployed successfully!"

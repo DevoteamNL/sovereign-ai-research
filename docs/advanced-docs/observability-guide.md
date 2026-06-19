@@ -126,7 +126,7 @@ Check `deploy/helm/observability/helm/grafana/values.yaml` for configured creden
 
 **Get MLflow URL:**
 ```bash
-echo "https://$(oc get route mlflow -n observability-hub -o jsonpath='{.spec.host}')"
+echo "https://$(oc get route mlflow -n redhat-ods-applications -o jsonpath='{.spec.host}')"
 ```
 
 **Use cases:**
@@ -281,8 +281,8 @@ oc logs -n ns-aiq deployment/aiq-backend | grep -i "otlp\|mlflow\|trace"
 
 **Check MLflow deployment:**
 ```bash
-oc get deployment mlflow -n observability-hub
-oc logs -n observability-hub deployment/mlflow --tail=50
+oc get deployment mlflow -n redhat-ods-applications
+oc logs -n redhat-ods-applications deployment/mlflow --tail=50
 ```
 
 **Test connectivity from AI-Q namespace:**

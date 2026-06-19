@@ -383,7 +383,7 @@ Or manually uninstall in reverse order (resources first, then operators):
 
 ```bash
 # Uninstall observability resources
-helm uninstall mlflow -n observability-hub
+helm uninstall mlflow -n redhat-ods-applications
 helm uninstall logging-stack -n openshift-logging
 helm uninstall grafana -n observability-hub
 helm uninstall uwm
