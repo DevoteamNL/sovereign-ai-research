@@ -126,7 +126,7 @@ Check `deploy/helm/observability/helm/grafana/values.yaml` for configured creden
 
 **Get MLflow URL:**
 ```bash
-echo "https://$(oc get route mlflow -n redhat-ods-applications -o jsonpath='{.spec.host}')"
+oc get consolelink | grep -i mlflow
 ```
 
 **Use cases:**
