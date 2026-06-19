@@ -307,7 +307,7 @@ This will install:
 - **MLflow** for agent tracing
 - **Required operators** (Cluster Observability, Grafana, OpenTelemetry, Logging)
 
-NOTE: For more detailed information on verifying the observability stack deployment and utilizing the resources, review the observability stack guide at docs/advanced-docs/observability-guide.md
+NOTE: For more detailed information on verifying the observability stack deployment and utilizing the resources including configuring tracing in MLflow, review the observability stack guide at docs/advanced-docs/observability-guide.md
 
 ### Using the research assistant AI quickstart
 
