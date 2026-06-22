@@ -69,6 +69,7 @@ from unittest.mock import patch
 
 import pytest
 
+from aiq_agent.auth import Principal
 from aiq_api.jobs.callbacks import ArtifactType
 from aiq_api.jobs.callbacks import DeepResearchEventCallback
 from aiq_api.jobs.callbacks import EventCategory
@@ -363,6 +364,8 @@ class TestDeepResearchEventCallback:
 class TestSubmitDeepResearchJob:
     """Tests for the submit_deep_research_job function."""
 
+    principal = Principal(type="test", sub="user-1", email="test@example.com", name="Test User")
+
     @pytest.mark.asyncio
     async def test_submit_without_scheduler_raises(self):
         """Test submit_deep_research_job raises without NAT_DASK_SCHEDULER_ADDRESS."""
@@ -393,10 +396,12 @@ class TestSubmitDeepResearchJob:
             },
         ):
             with patch("nat.front_ends.fastapi.async_jobs.job_store.JobStore", return_value=mock_job_store):
-                result = await submit_deep_research_job(
-                    input_text="test query",
-                    owner="test@example.com",
-                )
+                with patch("aiq_api.jobs.submit.get_current_principal", return_value=self.principal):
+                    with patch("aiq_api.jobs.submit.create_job_access"):
+                        result = await submit_deep_research_job(
+                            input_text="test query",
+                            owner="test@example.com",
+                        )
 
         assert result == "test-job-id"
         mock_job_store.submit_job.assert_called_once()
@@ -418,12 +423,14 @@ class TestSubmitDeepResearchJob:
             },
         ):
             with patch("nat.front_ends.fastapi.async_jobs.job_store.JobStore", return_value=mock_job_store):
-                result = await submit_agent_job(
-                    agent_type="deep_researcher",
-                    input_text="test query",
-                    owner="test@example.com",
-                    data_sources=["web_search"],
-                )
+                with patch("aiq_api.jobs.submit.get_current_principal", return_value=self.principal):
+                    with patch("aiq_api.jobs.submit.create_job_access"):
+                        result = await submit_agent_job(
+                            agent_type="deep_researcher",
+                            input_text="test query",
+                            owner="test@example.com",
+                            data_sources=["web_search"],
+                        )
 
         assert result == "test-job-id"
         mock_job_store.submit_job.assert_called_once()
@@ -447,14 +454,109 @@ class TestSubmitDeepResearchJob:
             },
         ):
             with patch("nat.front_ends.fastapi.async_jobs.job_store.JobStore", return_value=mock_job_store):
-                result = await submit_deep_research_job(
-                    input_text="test query",
-                    owner="test@example.com",
-                    job_id="custom-job-id",
-                )
+                with patch("aiq_api.jobs.submit.get_current_principal", return_value=self.principal):
+                    with patch("aiq_api.jobs.submit.create_job_access"):
+                        result = await submit_deep_research_job(
+                            input_text="test query",
+                            owner="test@example.com",
+                            job_id="custom-job-id",
+                        )
 
         assert result == "custom-job-id"
         mock_job_store.ensure_job_id.assert_called_with("custom-job-id")
+
+    @pytest.mark.asyncio
+    async def test_submit_requires_verified_principal(self):
+        """Test submit_agent_job fails closed when no verified principal is available."""
+        from aiq_api.jobs.submit import submit_agent_job
+
+        mock_job_store = MagicMock()
+
+        with patch.dict(
+            "os.environ",
+            {
+                "NAT_DASK_SCHEDULER_ADDRESS": "tcp://localhost:8786",
+                "REQUIRE_AUTH": "true",
+            },
+        ):
+            with patch("nat.front_ends.fastapi.async_jobs.job_store.JobStore", return_value=mock_job_store):
+                with patch("aiq_api.jobs.submit.get_current_principal", return_value=None):
+                    with pytest.raises(RuntimeError, match="Verified current principal required"):
+                        await submit_agent_job(
+                            agent_type="deep_researcher",
+                            input_text="test query",
+                            owner="test@example.com",
+                        )
+
+        mock_job_store.submit_job.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_submit_uses_compatibility_principal_when_auth_disabled(self):
+        """Test submit_agent_job still works without verified principal when auth is disabled."""
+        from aiq_api.jobs.submit import submit_agent_job
+
+        mock_job_store = MagicMock()
+        mock_job_store.ensure_job_id.return_value = "test-job-id"
+        mock_job_store.submit_job = AsyncMock(return_value=None)
+
+        with patch.dict(
+            "os.environ",
+            {
+                "NAT_DASK_SCHEDULER_ADDRESS": "tcp://localhost:8786",
+                "NAT_JOB_STORE_DB_URL": "sqlite:///./test.db",
+                "REQUIRE_AUTH": "false",
+            },
+        ):
+            with patch("nat.front_ends.fastapi.async_jobs.job_store.JobStore", return_value=mock_job_store):
+                with patch("aiq_api.jobs.submit.get_current_principal", return_value=None):
+                    with patch(
+                        "aiq_api.jobs.submit.create_job_access",
+                    ) as create_job_access:
+                        result = await submit_agent_job(
+                            agent_type="deep_researcher",
+                            input_text="test query",
+                            owner="test@example.com",
+                        )
+
+        assert result == "test-job-id"
+        create_job_access.assert_called_once()
+        principal = create_job_access.call_args.args[1]
+        assert principal.type == "internal"
+        assert principal.sub == "test@example.com"
+        assert principal.email == "test@example.com"
+
+    @pytest.mark.asyncio
+    async def test_submit_rolls_back_when_job_access_persistence_fails(self):
+        """Test submit_agent_job rolls back partial submission on access persistence failure."""
+        from aiq_api.jobs.submit import submit_agent_job
+
+        mock_job_store = MagicMock()
+        mock_job_store.ensure_job_id.return_value = "test-job-id"
+        mock_job_store.submit_job = AsyncMock(return_value=None)
+
+        with patch.dict(
+            "os.environ",
+            {
+                "NAT_DASK_SCHEDULER_ADDRESS": "tcp://localhost:8786",
+                "NAT_JOB_STORE_DB_URL": "sqlite:///./test.db",
+            },
+        ):
+            with patch("nat.front_ends.fastapi.async_jobs.job_store.JobStore", return_value=mock_job_store):
+                with patch("aiq_api.jobs.submit.get_current_principal", return_value=self.principal):
+                    with patch(
+                        "aiq_api.jobs.submit.create_job_access",
+                        side_effect=RuntimeError("db write failed"),
+                    ):
+                        with patch("aiq_api.jobs.submit.rollback_job_submission") as rollback_job_submission:
+                            with pytest.raises(RuntimeError, match="db write failed"):
+                                await submit_agent_job(
+                                    agent_type="deep_researcher",
+                                    input_text="test query",
+                                    owner="test@example.com",
+                                )
+
+        mock_job_store.submit_job.assert_called_once()
+        rollback_job_submission.assert_called_once_with("test-job-id", "sqlite:///./test.db")
 
 
 class TestEventStore:
@@ -1195,3 +1297,350 @@ class TestSQLAlchemyPoolFilter:
         )
 
         assert filter_obj.filter(record) is True
+
+
+class TestAsyncJobRunnerAgentFactory:
+    """Tests for async job agent construction."""
+
+    @pytest.mark.asyncio
+    async def test_create_llm_provider_configures_deep_research_roles(self):
+        """Async workers honor all deep-research role-specific LLM config fields."""
+        from aiq_agent.agents.deep_researcher.register import DeepResearchAgentConfig
+        from aiq_agent.common import LLMRole
+        from aiq_api.jobs.runner import _create_llm_provider
+
+        llms = {
+            "orchestrator": MagicMock(name="orchestrator_llm"),
+            "router": MagicMock(name="source_router_llm"),
+            "planner": MagicMock(name="planner_llm"),
+            "researcher": MagicMock(name="researcher_llm"),
+            "writer": MagicMock(name="writer_llm"),
+        }
+
+        async def get_llm(llm_ref, wrapper_type):
+            return llms[llm_ref]
+
+        builder = MagicMock()
+        builder.get_llm = AsyncMock(side_effect=get_llm)
+        fn_config = DeepResearchAgentConfig(
+            orchestrator_llm="orchestrator",
+            source_router_llm="router",
+            planner_llm="planner",
+            researcher_llm="researcher",
+            writer_llm="writer",
+        )
+
+        provider, default_llm = await _create_llm_provider(builder, fn_config)
+
+        assert default_llm is llms["orchestrator"]
+        assert provider.get(LLMRole.ORCHESTRATOR) is llms["orchestrator"]
+        assert provider.get(LLMRole.ROUTER) is llms["router"]
+        assert provider.get(LLMRole.PLANNER) is llms["planner"]
+        assert provider.get(LLMRole.RESEARCHER) is llms["researcher"]
+        assert provider.get(LLMRole.REPORT_WRITER) is llms["writer"]
+        assert builder.get_llm.await_count == 5
+
+    @pytest.mark.asyncio
+    async def test_create_llm_provider_reuses_shared_llm_refs(self):
+        """Shared role/default LLM refs should initialize one wrapper instance."""
+        from types import SimpleNamespace
+
+        from aiq_agent.common import LLMRole
+        from aiq_api.jobs.runner import _create_llm_provider
+
+        shared_llm = MagicMock(name="shared_llm")
+
+        async def get_llm(llm_ref, wrapper_type):
+            assert llm_ref == "shared"
+            return shared_llm
+
+        builder = MagicMock()
+        builder.get_llm = AsyncMock(side_effect=get_llm)
+        fn_config = SimpleNamespace(
+            source_router_llm="shared",
+            planner_llm="shared",
+            researcher_llm="shared",
+            writer_llm="shared",
+            llm="shared",
+        )
+
+        provider, default_llm = await _create_llm_provider(builder, fn_config)
+
+        assert default_llm is shared_llm
+        assert provider.get(LLMRole.ROUTER) is shared_llm
+        assert provider.get(LLMRole.PLANNER) is shared_llm
+        assert provider.get(LLMRole.RESEARCHER) is shared_llm
+        assert provider.get(LLMRole.REPORT_WRITER) is shared_llm
+        builder.get_llm.assert_awaited_once()
+
+    def test_create_agent_instance_passes_config_and_job_id_when_supported(self):
+        """Async workers can receive generic function config without runner-specific agent knowledge."""
+        from aiq_agent.agents.deep_researcher.deepagents_runtime import SandboxConfig
+        from aiq_agent.agents.deep_researcher.deepagents_runtime import SkillsConfig
+        from aiq_agent.agents.deep_researcher.register import DeepResearchAgentConfig
+        from aiq_api.jobs.runner import _create_agent_instance
+
+        class FakeDeepResearcherAgent:
+            def __init__(
+                self,
+                *,
+                llm_provider,
+                tools,
+                verbose,
+                callbacks,
+                config=None,
+                job_id=None,
+            ):
+                self.llm_provider = llm_provider
+                self.tools = tools
+                self.verbose = verbose
+                self.callbacks = callbacks
+                self.config = config
+                self.job_id = job_id
+
+        fn_config = DeepResearchAgentConfig(
+            orchestrator_llm="llm",
+            skills=SkillsConfig(enabled=True),
+            sandbox=SandboxConfig(app_name="async-aiq"),
+        )
+
+        agent = _create_agent_instance(
+            agent_cls=FakeDeepResearcherAgent,
+            llm_provider="provider",
+            llm="llm",
+            tools=["tool"],
+            fn_config=fn_config,
+            verbose=True,
+            callbacks=["callback"],
+            job_id="job-123",
+        )
+
+        assert agent.job_id == "job-123"
+        assert agent.config is fn_config
+        assert agent.config.skills.enabled is True
+        assert agent.config.skills.agent_sources == {}
+        assert agent.config.sandbox is not None
+        assert agent.config.sandbox.app_name == "async-aiq"
+
+    def test_async_deep_researcher_constructor_applies_config_tuning(self):
+        """Async config= construction preserves catalog and concurrency settings."""
+        from aiq_agent.agents.deep_researcher.agent import DeepResearcherAgent
+        from aiq_agent.agents.deep_researcher.register import DeepResearchAgentConfig
+        from aiq_agent.common import LLMProvider
+        from aiq_agent.common import LLMRole
+        from aiq_api.jobs.runner import _create_agent_instance
+
+        mock_llm = MagicMock()
+        provider = LLMProvider()
+        provider.set_default(mock_llm)
+        provider.configure(LLMRole.ORCHESTRATOR, mock_llm)
+        fn_config = DeepResearchAgentConfig(
+            orchestrator_llm="llm",
+            domain_catalog_path="configs/domain_catalogs/deep_research_domain_catalog.yml",
+            enable_source_router=False,
+            max_research_concurrency=2,
+            max_concurrent_source_tool_calls=3,
+            max_source_tool_batch_size=4,
+        )
+
+        agent = _create_agent_instance(
+            agent_cls=DeepResearcherAgent,
+            llm_provider=provider,
+            llm=mock_llm,
+            tools=[],
+            fn_config=fn_config,
+            verbose=False,
+            callbacks=[],
+            job_id="async-job-123",
+        )
+
+        assert agent.domain_catalog_path == "configs/domain_catalogs/deep_research_domain_catalog.yml"
+        assert agent.enable_source_router is False
+        assert agent.max_research_concurrency == 2
+        assert agent.max_concurrent_source_tool_calls == 3
+        assert agent.max_source_tool_batch_size == 4
+
+    def test_async_deep_researcher_constructor_preserves_writer_skills(self):
+        """Async job construction preserves writer-only skills and sandbox job scoping."""
+        from langchain_core.messages import HumanMessage
+        from langchain_core.tools import tool
+
+        from aiq_agent.agents.deep_researcher.agent import DeepResearcherAgent
+        from aiq_agent.agents.deep_researcher.deepagents_runtime import SandboxConfig
+        from aiq_agent.agents.deep_researcher.deepagents_runtime import SkillsConfig
+        from aiq_agent.agents.deep_researcher.models import DeepResearchAgentState
+        from aiq_agent.agents.deep_researcher.register import DeepResearchAgentConfig
+        from aiq_agent.common import LLMProvider
+        from aiq_agent.common import LLMRole
+        from aiq_api.jobs.runner import _create_agent_instance
+
+        @tool
+        def async_test_search(query: str) -> str:
+            """Search test tool."""
+            return f"results for {query}"
+
+        mock_llm = MagicMock()
+        provider = LLMProvider()
+        provider.set_default(mock_llm)
+        provider.configure(LLMRole.ORCHESTRATOR, mock_llm)
+        provider.configure(LLMRole.PLANNER, mock_llm)
+        provider.configure(LLMRole.RESEARCHER, mock_llm)
+        provider.configure(LLMRole.REPORT_WRITER, mock_llm)
+        fn_config = DeepResearchAgentConfig(
+            orchestrator_llm="llm",
+            skills=SkillsConfig(
+                enabled=True,
+                agent_sources={
+                    "writer-agent": ("/skills/synthesis/",),
+                },
+            ),
+            sandbox=SandboxConfig(app_name="async-aiq"),
+        )
+        mock_deep_agent = MagicMock()
+        mock_deep_agent.with_config.return_value = mock_deep_agent
+
+        with (
+            patch(
+                "aiq_agent.agents.deep_researcher.deepagents_runtime._create_sandbox_backend",
+                return_value=MagicMock(),
+            ) as create_backend,
+            patch(
+                "aiq_agent.agents.deep_researcher.factory.create_deep_agent",
+                return_value=mock_deep_agent,
+            ) as create,
+            patch(
+                "aiq_agent.agents.deep_researcher.factory.create_summarization_middleware",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "aiq_agent.agents.deep_researcher.factory.create_agent",
+                return_value=MagicMock(),
+            ),
+        ):
+            agent = _create_agent_instance(
+                agent_cls=DeepResearcherAgent,
+                llm_provider=provider,
+                llm=mock_llm,
+                tools=[async_test_search],
+                fn_config=fn_config,
+                verbose=False,
+                callbacks=[],
+                job_id="async-job-123",
+            )
+            state = DeepResearchAgentState(
+                messages=[
+                    HumanMessage(
+                        content=(
+                            "Compare AI infrastructure capex over the last 8 quarters. Include QoQ and YoY growth."
+                        )
+                    )
+                ]
+            )
+            agent._build_orchestrator_agent(state)
+
+        kwargs = create.call_args.kwargs
+        assert "skills" not in kwargs
+        subagents = {subagent["name"]: subagent for subagent in kwargs["subagents"]}
+        assert "skills" not in subagents["planner-agent"]
+        assert subagents["writer-agent"]["skills"] == ["/skills/synthesis/"]
+        assert "Available Skills:" not in kwargs["system_prompt"]
+        assert "Use read_file to load the relevant SKILL.md BEFORE writing any code" not in kwargs["system_prompt"]
+        assert 'execute("python /workspace/[name].py")' not in kwargs["system_prompt"]
+        assert "Skills System" not in kwargs["system_prompt"]
+        assert "Shell commands cannot see `/shared/`" in kwargs["system_prompt"]
+        assert "writer-agent" in kwargs["system_prompt"]
+        assert "data-table-analysis" not in kwargs["system_prompt"]
+        assert create_backend.call_args.args[1] == "async-job-123"
+
+    def test_async_deep_researcher_empty_data_sources_keeps_internal_tools(self):
+        """Explicit empty data_sources disables source tools but keeps DeepResearcher helpers."""
+        from langchain_core.messages import HumanMessage
+
+        from aiq_agent.agents.deep_researcher.agent import DeepResearcherAgent
+        from aiq_agent.agents.deep_researcher.models import DeepResearchAgentState
+        from aiq_agent.agents.deep_researcher.register import DeepResearchAgentConfig
+        from aiq_agent.common import LLMProvider
+        from aiq_agent.common import LLMRole
+        from aiq_api.jobs.runner import _create_agent_instance
+
+        mock_llm = MagicMock()
+        provider = LLMProvider()
+        provider.set_default(mock_llm)
+        provider.configure(LLMRole.ORCHESTRATOR, mock_llm)
+        provider.configure(LLMRole.PLANNER, mock_llm)
+        provider.configure(LLMRole.RESEARCHER, mock_llm)
+        provider.configure(LLMRole.REPORT_WRITER, mock_llm)
+        mock_deep_agent = MagicMock()
+        mock_deep_agent.with_config.return_value = mock_deep_agent
+
+        with (
+            patch("aiq_agent.agents.deep_researcher.factory.create_deep_agent", return_value=mock_deep_agent) as create,
+            patch(
+                "aiq_agent.agents.deep_researcher.factory.create_summarization_middleware",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "aiq_agent.agents.deep_researcher.factory.create_agent",
+                return_value=MagicMock(),
+            ),
+        ):
+            agent = _create_agent_instance(
+                agent_cls=DeepResearcherAgent,
+                llm_provider=provider,
+                llm=mock_llm,
+                tools=[],
+                fn_config=DeepResearchAgentConfig(orchestrator_llm="llm"),
+                verbose=False,
+                callbacks=[],
+                job_id="async-job-123",
+            )
+            state = DeepResearchAgentState(messages=[HumanMessage(content="Research without tools")])
+            agent._build_orchestrator_agent(state)
+
+        tool_names = [tool.name for tool in create.call_args.kwargs["tools"]]
+        assert tool_names == ["think", "get_verified_sources", "run_research_batch"]
+        assert [tool.name for tool in create.call_args.kwargs["subagents"][0]["tools"]] == [
+            "lookup_source_catalog",
+        ]
+        assert [tool.name for tool in create.call_args.kwargs["subagents"][1]["tools"]] == [
+            "think",
+            "get_verified_sources",
+        ]
+
+    def test_create_agent_instance_does_not_drop_config_on_internal_type_error(self):
+        """Constructor bugs must not silently fall back to no-config construction."""
+        from aiq_agent.agents.deep_researcher.deepagents_runtime import SandboxConfig
+        from aiq_agent.agents.deep_researcher.deepagents_runtime import SkillsConfig
+        from aiq_agent.agents.deep_researcher.register import DeepResearchAgentConfig
+        from aiq_api.jobs.runner import _create_agent_instance
+
+        class BrokenDeepResearcherAgent:
+            def __init__(
+                self,
+                *,
+                llm_provider,
+                tools,
+                verbose,
+                callbacks,
+                config=None,
+                job_id=None,
+            ):
+                raise TypeError("internal constructor failure")
+
+        fn_config = DeepResearchAgentConfig(
+            orchestrator_llm="llm",
+            skills=SkillsConfig(enabled=True),
+            sandbox=SandboxConfig(app_name="async-aiq"),
+        )
+
+        with pytest.raises(TypeError, match="internal constructor failure"):
+            _create_agent_instance(
+                agent_cls=BrokenDeepResearcherAgent,
+                llm_provider="provider",
+                llm="llm",
+                tools=["tool"],
+                fn_config=fn_config,
+                verbose=True,
+                callbacks=["callback"],
+                job_id="job-123",
+            )

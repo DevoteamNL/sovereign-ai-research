@@ -35,6 +35,7 @@ import re
 import threading
 from collections import OrderedDict
 from collections.abc import Callable
+from collections.abc import Sequence
 from dataclasses import dataclass
 from dataclasses import field
 from html import unescape
@@ -409,7 +410,11 @@ def register_source_parser(
     _PARSER_REGISTRY.append((match_fn, parser_fn))
 
 
-def extract_sources_from_tool_result(tool_name: str, content: str) -> list[SourceEntry]:
+def extract_sources_from_tool_result(
+    tool_name: str,
+    content: str,
+    source_id: str | None = None,
+) -> list[SourceEntry]:
     """Extract sources from a tool's output.
 
     Strategy:
@@ -417,9 +422,20 @@ def extract_sources_from_tool_result(tool_name: str, content: str) -> list[Sourc
        formats like knowledge layer citation keys).
     2. Otherwise, fall back to the generic URL extractor which finds all
        URLs in any tool output regardless of format.
+    3. If neither produces entries, register the tool result itself as a
+       non-URL citation source.
 
     This means new sources (Bing, Perplexity, etc.) work automatically
     without any parser registration — as long as their output contains URLs.
+
+    The non-URL fallback is permissive on purpose: callers (the shallow and
+    deep researchers) are responsible for deciding which tool calls are
+    eligible to contribute sources, typically by limiting capture to the
+    agent's loaded tool set. The optional ``source_id`` is stored on the
+    returned entries when callers have resolved this tool to a configured
+    data source via
+    :func:`aiq_agent.common.data_source_registry.get_source_id_for_tool`,
+    but it does not gate the fallback.
     """
     name_lower = tool_name.lower()
     for match_fn, parser_fn in _PARSER_REGISTRY:
@@ -430,15 +446,51 @@ def extract_sources_from_tool_result(tool_name: str, content: str) -> list[Sourc
                 logger.warning("Parser failed for tool %s, falling back to generic", tool_name, exc_info=True)
                 break
     # Generic fallback: extract all URLs from content
-    return _parse_generic_urls(content, tool_name)
+    entries = _parse_generic_urls(content, tool_name)
+    if entries:
+        return entries
+
+    if _is_non_citable_status_output(content):
+        return []
+
+    # Non-URL fallback: register the tool result itself as a source whenever
+    # the tool produced non-empty output. The caller has already decided
+    # this tool is eligible to contribute sources (typically by limiting
+    # capture to the agent's loaded tool set).
+    if content.strip():
+        return [SourceEntry(citation_key=tool_name, source_type="tool_result", tool_name=tool_name)]
+
+    return []
+
+
+def _is_non_citable_status_output(content: str) -> bool:
+    """Return whether content is a tool status/error message, not evidence."""
+    normalized = re.sub(r"\s+", " ", content.strip()).rstrip(".").lower()
+    if not normalized:
+        return False
+    if normalized.startswith("error:"):
+        return True
+    return normalized == "search returned no results" or normalized.endswith(" search returned no results")
 
 
 # ---------------------------------------------------------------------------
 # Built-in parsers
 # ---------------------------------------------------------------------------
 
-# Generic URL extractor — works for any tool output format
-_GENERIC_URL_RE = re.compile(r"https?://[^\s<>\"',\]]+")
+# Generic URL extractor — works for any tool output format.
+# Commas are valid URL path characters (RFC 3986 sub-delim) and appear in real
+# URLs like https://weathercams.faa.gov/map/-122.31167,47.22287,10/...; we
+# include them in the match and rely on _URL_TRIM_CHARS below to strip any
+# comma that's actually sentence punctuation. ``]`` stays excluded here
+# because it almost always terminates a markdown link rather than appearing
+# in a path.
+_GENERIC_URL_RE = re.compile(r"https?://[^\s<>\"'\]]+")
+
+# Trailing characters to strip from a captured URL.  Covers sentence
+# punctuation and the closing chars of common Markdown wrappers — ``]`` for
+# ``[https://...]`` and ``>`` for ``<https://...>``.  Used at every site that
+# captures a URL via a permissive regex (registration and verification).
+_URL_TRIM_CHARS = ".,;)]>"
 
 
 # Patterns for extracting titles near URLs in common tool output formats
@@ -498,7 +550,7 @@ def _parse_generic_urls(content: str, tool_name: str) -> list[SourceEntry]:
     seen: set[str] = set()
     entries: list[SourceEntry] = []
     for match in _GENERIC_URL_RE.finditer(content):
-        url = unescape(match.group(0)).rstrip(".,;)")
+        url = unescape(match.group(0)).rstrip(_URL_TRIM_CHARS)
         normalized = _normalize_url(url)
         if normalized not in seen:
             seen.add(normalized)
@@ -548,6 +600,11 @@ _REFERENCE_SECTION_RE = re.compile(
 )
 
 _CITATION_LINE_RE = re.compile(r"^\s*[-*]?\s*\[(\d+)\]\s*(.+)$", re.MULTILINE)
+_ORDERED_REFERENCE_LINE_RE = re.compile(r"^(\s*)(\d+)[.)]\s+(.+)$", re.MULTILINE)
+_INLINE_CITATION_RE = re.compile(r"\[(\d+)\]")
+_FOOTNOTE_REFERENCE_LINE_RE = re.compile(r"^\s*\[\^(\d+)\]:?\s*", re.MULTILINE)
+_FOOTNOTE_INLINE_CITATION_RE = re.compile(r"\[\^(\d+)\]")
+_SOURCE_LOCATION_CITATION_RE = re.compile(r"\[(\d+)\s*†[^\]]+\]")
 
 _URL_IN_LINE_RE = re.compile(r"https?://\S+")
 
@@ -588,6 +645,42 @@ def _is_knowledge_citation(ref_text: str, registry: SourceRegistry | None = None
     return False, None
 
 
+def _format_registry_reference(num: int, entry: SourceEntry) -> str | None:
+    """Render a registered source as a verifier-readable reference line."""
+    title = entry.title or entry.tool_name or entry.source_type or "Source"
+    if entry.url:
+        return f"[{num}] {title}: {entry.url}"
+    if entry.citation_key:
+        return f"[{num}] {entry.citation_key}"
+    return None
+
+
+def _normalize_citation_syntax(report_text: str) -> str:
+    """Normalize citation bracket variants before verification/sanitization."""
+    report_text = report_text.replace("【", "[").replace("】", "]")
+    report_text = _SOURCE_LOCATION_CITATION_RE.sub(r"[\1]", report_text)
+    report_text = _FOOTNOTE_REFERENCE_LINE_RE.sub(r"[\1] ", report_text)
+    return _FOOTNOTE_INLINE_CITATION_RE.sub(r"[\1]", report_text)
+
+
+def _normalize_ordered_reference_lines(ref_section: str) -> str:
+    """Convert ordered-list reference lines to the verifier's canonical [N] form."""
+    return _ORDERED_REFERENCE_LINE_RE.sub(r"\1[\2] \3", ref_section)
+
+
+def _inline_citation_numbers(text: str) -> set[int]:
+    """Return numeric inline citation labels present in text."""
+    return {int(match.group(1)) for match in _INLINE_CITATION_RE.finditer(text)}
+
+
+def _strip_inline_citations_not_in(text: str, valid_numbers: set[int]) -> str:
+    """Remove inline citations whose labels are not in valid_numbers."""
+    return _INLINE_CITATION_RE.sub(
+        lambda match: match.group(0) if int(match.group(1)) in valid_numbers else "",
+        text,
+    )
+
+
 def _renumber_citations(body: str, ref_section: str) -> tuple[str, str, dict[int, int]]:
     """Renumber [N] citations sequentially, closing any gaps.
 
@@ -622,7 +715,12 @@ def _renumber_citations(body: str, ref_section: str) -> tuple[str, str, dict[int
     return body, ref_section, renumber_map
 
 
-def verify_citations(report_text: str, registry: SourceRegistry) -> CitationVerificationResult:
+def verify_citations(
+    report_text: str,
+    registry: SourceRegistry,
+    *,
+    reference_sources: Sequence[SourceEntry] | None = None,
+) -> CitationVerificationResult:
     """Verify citations in a report against the source registry.
 
     Algorithm:
@@ -637,12 +735,15 @@ def verify_citations(report_text: str, registry: SourceRegistry) -> CitationVeri
     Args:
         report_text: The full report text with citations.
         registry: SourceRegistry populated from tool call results.
+        reference_sources: Optional writer-facing source list, in the same
+            numbering order the writer saw. Used only to synthesize a missing
+            references section.
 
     Returns:
         CitationVerificationResult with cleaned report and audit trail.
     """
-    # Normalize Unicode fullwidth brackets to ASCII (LLMs sometimes use 【N】 instead of [N])
-    report_text = report_text.replace("【", "[").replace("】", "]")
+    # Normalize citation syntax variants before validation.
+    report_text = _normalize_citation_syntax(report_text)
 
     # Early exit: nothing to validate against
     all_sources = registry.all_sources()
@@ -662,12 +763,42 @@ def verify_citations(report_text: str, registry: SourceRegistry) -> CitationVeri
     # Find references section
     ref_match = _REFERENCE_SECTION_RE.search(report_text)
     if not ref_match:
-        logger.warning("[CitationVerify] No references section found in report; skipping")
-        return CitationVerificationResult(verified_report=report_text)
+        if not _INLINE_CITATION_RE.search(report_text):
+            logger.warning("[CitationVerify] No references section found in report; skipping")
+            return CitationVerificationResult(verified_report=report_text)
+
+        if reference_sources is None:
+            logger.warning(
+                "[CitationVerify] No references section found; cannot safely synthesize references "
+                "without the writer-facing source list"
+            )
+            return CitationVerificationResult(verified_report=report_text)
+
+        writer_sources = list(reference_sources)
+        cited_numbers = sorted(_inline_citation_numbers(report_text))
+        reference_lines = [
+            line
+            for i in cited_numbers
+            if 1 <= i <= len(writer_sources)
+            if (line := _format_registry_reference(i, writer_sources[i - 1]))
+        ]
+        if not reference_lines:
+            logger.warning("[CitationVerify] No references section found and no renderable writer-facing sources")
+            return CitationVerificationResult(verified_report=_strip_inline_citations_not_in(report_text, set()))
+
+        logger.warning(
+            "[CitationVerify] No references section found; appending %d inline-cited registered source(s)",
+            len(reference_lines),
+        )
+        report_text = report_text.rstrip() + "\n\n## Sources\n" + "\n".join(reference_lines)
+        ref_match = _REFERENCE_SECTION_RE.search(report_text)
+        if ref_match is None:
+            return CitationVerificationResult(verified_report=report_text)
 
     ref_start = ref_match.start()
     body = report_text[:ref_start]
-    ref_section = report_text[ref_start:]
+    original_ref_section = report_text[ref_start:]
+    ref_section = _normalize_ordered_reference_lines(original_ref_section)
 
     # Parse citation lines in the references section
     valid_citations: list[dict] = []
@@ -682,7 +813,7 @@ def verify_citations(report_text: str, registry: SourceRegistry) -> CitationVeri
         # Try URL match first
         url_match = _URL_IN_LINE_RE.search(ref_text)
         if url_match:
-            url = url_match.group(0).rstrip(".,;)")
+            url = url_match.group(0).rstrip(_URL_TRIM_CHARS)
             canonical = registry.resolve_url(url)
             if canonical:
                 if canonical != url:
@@ -711,34 +842,69 @@ def verify_citations(report_text: str, registry: SourceRegistry) -> CitationVeri
         logger.debug("[CitationVerify]   [%d] REMOVE — unverifiable: %s", num, ref_text[:80])
         removed_citations.append({"number": num, "line": full_line, "reason": "unverifiable"})
 
+    # Dedup: collapse multiple [N] reference lines that resolve to the same
+    # registry source. The model often makes the same tool call twice (e.g.
+    # ``mcp_time__get_current_time`` for two timezones) and emits a separate
+    # ``[N] tool_name`` line for each call; without this pass both lines
+    # survive verification because each is independently valid. We keep the
+    # lowest-numbered occurrence and rewrite later inline citations to that
+    # number so the prose still cites the source.
+    seen_keys: dict[str, int] = {}  # canonical_key -> kept citation number
+    duplicate_rewrites: dict[int, int] = {}  # duplicate_num -> canonical_num
+    deduped_valid: list[dict] = []
+    for c in valid_citations:
+        key = c["url"] or c["citation_key"]
+        if key is None:
+            # Defensive: a valid citation must have one of url/citation_key.
+            # If neither is set we cannot dedup, so keep the entry.
+            deduped_valid.append(c)
+            continue
+        canonical_num = seen_keys.get(key)
+        if canonical_num is None:
+            seen_keys[key] = c["number"]
+            deduped_valid.append(c)
+            continue
+        duplicate_rewrites[c["number"]] = canonical_num
+        removed_citations.append(
+            {
+                "number": c["number"],
+                "line": c["line"],
+                "reason": f"duplicate_of_citation_{canonical_num}",
+            }
+        )
+        logger.debug(
+            "[CitationVerify]   [%d] REMOVE — duplicate of [%d]: %s",
+            c["number"],
+            canonical_num,
+            key,
+        )
+    valid_citations = deduped_valid
+
     # Apply URL replacements (garbled -> canonical) in the references section
     if url_replacements:
         for garbled, canonical in url_replacements.items():
             ref_section = ref_section.replace(garbled, canonical)
 
-    if not removed_citations:
-        logger.debug("[CitationVerify] Result: all %d citation(s) valid — no changes", len(valid_citations))
-        verified = body + ref_section if url_replacements else report_text
-        return CitationVerificationResult(
-            verified_report=verified,
-            valid_citations=valid_citations,
-        )
-
     removed_numbers = {c["number"] for c in removed_citations}
 
-    # Remove invalid reference lines from the references section
-    cleaned_ref_lines = []
-    for line in ref_section.split("\n"):
-        line_match = _CITATION_LINE_RE.match(line)
-        if line_match and int(line_match.group(1)) in removed_numbers:
-            continue
-        cleaned_ref_lines.append(line)
+    # Remove invalid (and duplicate) reference lines from the references section.
+    cleaned_ref_lines = [
+        line
+        for line in ref_section.split("\n")
+        if not ((line_match := _CITATION_LINE_RE.match(line)) and int(line_match.group(1)) in removed_numbers)
+    ]
     cleaned_ref_section = "\n".join(cleaned_ref_lines)
 
-    # Remove orphaned inline citations from body
+    # Body fixups:
+    #  * Duplicate citations get rewritten to the canonical number — the
+    #    cited source is real, only the [N] label is wrong.
+    #  * Genuinely invalid citations get stripped — the source is fabricated
+    #    or unverifiable.
     cleaned_body = body
-    for num in removed_numbers:
-        cleaned_body = re.sub(rf"\[{num}\]", "", cleaned_body)
+    for old_num, canonical_num in duplicate_rewrites.items():
+        cleaned_body = re.sub(rf"\[{old_num}\]", f"[{canonical_num}]", cleaned_body)
+    valid_numbers = {c["number"] for c in valid_citations}
+    cleaned_body = _strip_inline_citations_not_in(cleaned_body, valid_numbers)
 
     # Note: renumbering is deferred to sanitize_report() which always runs after
     # this function and handles renumbering in a single pass.
@@ -789,11 +955,13 @@ _TRUNCATED_URL_RE = re.compile(r"\.\.\.$|…$")  # ends in ... or ellipsis
 # Suspicious URL patterns
 _IP_ADDRESS_RE = re.compile(r"^https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}")
 _SUSPICIOUS_SCHEMES_RE = re.compile(r"^(?:javascript|data|vbscript|file):", re.IGNORECASE)
-_BARE_URL_RE = re.compile(r"https?://[^\s<>\"',\]]+")
+# See _GENERIC_URL_RE for the rationale on why ``,`` is matched and stripped
+# via _URL_TRIM_CHARS rather than excluded in the character class.
+_BARE_URL_RE = re.compile(r"https?://[^\s<>\"'\]]+")
 
 # Body URL patterns (used by sanitize_report)
 _MD_LINK_RE = re.compile(r"\[([^\]]*)\]\(\s*\w+://[^\s)]+\)")
-_BODY_URL_RE = re.compile(r"\w+://[^\s<>\"',\]]+")
+_BODY_URL_RE = re.compile(r"\w+://[^\s<>\"'\]]+")
 
 
 @dataclass
@@ -826,6 +994,8 @@ def sanitize_report(report_text: str) -> ReportSanitizationResult:
     Returns:
         ReportSanitizationResult with cleaned report and audit trail.
     """
+    report_text = _normalize_citation_syntax(report_text)
+
     body_urls_removed = 0
     body_urls_replaced = 0
     shortened_urls_removed: list[str] = []
@@ -850,11 +1020,11 @@ def sanitize_report(report_text: str) -> ReportSanitizationResult:
             num = int(m.group(1))
             url_m = _BARE_URL_RE.search(m.group(2))
             if url_m:
-                url_to_citation[_normalize_url(url_m.group(0).rstrip(".,;)"))] = num
+                url_to_citation[_normalize_url(url_m.group(0).rstrip(_URL_TRIM_CHARS))] = num
 
     def _replace_body_url(match: re.Match) -> str:
         nonlocal body_urls_removed, body_urls_replaced
-        url = match.group(0).rstrip(".,;)")
+        url = match.group(0).rstrip(_URL_TRIM_CHARS)
         normalized = _normalize_url(url)
         if normalized in url_to_citation:
             body_urls_replaced += 1
@@ -884,7 +1054,7 @@ def sanitize_report(report_text: str) -> ReportSanitizationResult:
             url_match = _BARE_URL_RE.search(line)
             if not url_match:
                 continue
-            url = url_match.group(0).rstrip(".,;)")
+            url = url_match.group(0).rstrip(_URL_TRIM_CHARS)
 
             # Check for non-http schemes embedded in text
             if _SUSPICIOUS_SCHEMES_RE.search(line):

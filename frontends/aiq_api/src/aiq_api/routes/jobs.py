@@ -32,16 +32,24 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from typing import TYPE_CHECKING
+from typing import Annotated
 
+from fastapi import Body
 from fastapi import FastAPI
 from fastapi import HTTPException
-from fastapi import Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 
+from aiq_agent.common.data_source_registry import get_all_sources
+from aiq_agent.common.data_source_registry import get_all_tool_refs
+from aiq_agent.common.data_source_registry import get_source_id_for_tool
+from nat.builder.framework_enum import LLMFrameworkEnum
+
+from ..jobs.access import require_verified_principal
 from ..registry import AGENT_REGISTRY
 from ..registry import get_agent_config
 
@@ -54,19 +62,6 @@ logger = logging.getLogger(__name__)
 
 class JobSubmitRequest(BaseModel):
     """Request to submit an async job."""
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "agent_type": "deep_researcher",
-                    "input": "What are the latest advances in quantum computing?",
-                    "job_id": None,
-                    "expiry_seconds": 86400,
-                }
-            ]
-        }
-    )
 
     agent_type: str = Field(..., description="Agent type (e.g., 'deep_researcher')")
     input: str = Field(..., min_length=1, description="Input query for the agent")
@@ -81,6 +76,159 @@ class JobSubmitRequest(BaseModel):
         ge=600,
         le=604800,
         description="Job expiry in seconds (default from config, max 7 days)",
+    )
+    data_sources: list[str] | None = Field(
+        None,
+        description=(
+            "Optional data source IDs to target. Omit or set null to use all data-source tools "
+            "available to the chosen agent. When specific IDs are passed, unmapped utility tools "
+            "(e.g., 'think') remain available. Pass an empty list to run the agent with no "
+            "data-source tools; unmapped utility tools remain available."
+        ),
+    )
+
+
+JOB_SUBMIT_EXAMPLES: dict[str, dict] = {
+    "default": {
+        "summary": "Default (all data sources)",
+        "value": {
+            "agent_type": "deep_researcher",
+            "input": "What are the latest advances in quantum computing?",
+            "expiry_seconds": 86400,
+        },
+    },
+    "scoped": {
+        "summary": "Scoped to specific data sources",
+        "value": {
+            "agent_type": "deep_researcher",
+            "input": "What are the latest advances in quantum computing?",
+            "data_sources": ["web_search"],
+        },
+    },
+}
+
+
+def _source_ids_by_lowercase() -> tuple[list[str], dict[str, str]]:
+    """Return known source IDs and a lower-case lookup preserving canonical IDs.
+
+    Assumes registry IDs are unique under ``.lower()``. The data source registry
+    convention is snake_case (e.g. ``web_search``, ``knowledge_layer``); two IDs
+    differing only by case would collapse here.
+    """
+    known_ids = sorted(source.id for source in get_all_sources())
+    return known_ids, {source_id.lower(): source_id for source_id in known_ids}
+
+
+async def _get_agent_available_source_ids(builder: WorkflowBuilder, agent_config_name: str) -> list[str]:
+    """Return mapped source IDs with at least one effective tool for an agent config.
+
+    This mirrors the async job runner's effective tool resolution: explicit
+    `tools` wins and overrides registry refs, otherwise inherit all registry
+    refs, resolve LangChain wrappers through the builder, then apply exact
+    tool-name `exclude_tools`.
+
+    A source is reported as available if at least one of its tools survives
+    ``exclude_tools``; partial exclusion does not hide the source.
+
+    Assumes agent configs registered for async submission expose typed
+    ``tools`` and ``exclude_tools`` fields (see ``aiq_agent.agents.*.register``).
+    A registered agent without these fields is a registration-time bug, not a
+    runtime concern.
+    """
+    fn_config = builder.get_function_config(agent_config_name)
+    tool_refs = fn_config.tools if fn_config.tools is not None else get_all_tool_refs()
+    tools = await builder.get_tools(tool_names=tool_refs, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
+
+    excluded = set(fn_config.exclude_tools or [])
+    if excluded:
+        tools = [tool for tool in tools if getattr(tool, "name", "") not in excluded]
+
+    source_ids: set[str] = set()
+    for tool in tools:
+        name = getattr(tool, "name", "")
+        if not name:
+            continue
+        sid = get_source_id_for_tool(name)
+        if sid is not None:
+            source_ids.add(sid)
+    return sorted(source_ids)
+
+
+async def _validate_data_sources_for_agent(
+    *,
+    builder: WorkflowBuilder,
+    agent_type: str,
+    agent_config_name: str,
+    data_sources: list[str] | None,
+) -> None:
+    """Raise HTTP 422 if requested sources are unknown or unavailable to the selected agent."""
+    # Semantic fast path: omit/null/empty means "use all data-source tools available
+    # to the chosen agent" (or, for empty list, "use no data-source tools"). In both
+    # cases there is nothing for the caller to validate against, so we skip.
+    #
+    # Bonus: this also avoids a builder.get_tools() round-trip on the default code
+    # path -- pinned by test_submit_job_forwards_omitted_data_sources_without_resolving_tools.
+    if not data_sources:
+        return
+
+    known_ids, known_by_lower = _source_ids_by_lowercase()
+
+    try:
+        available_ids = await _get_agent_available_source_ids(builder, agent_config_name)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.exception(
+            "Failed to validate data sources for agent %s using config %s",
+            agent_type,
+            agent_config_name,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to validate data sources for selected agent",
+        ) from exc
+
+    available_by_lower = {source_id.lower(): source_id for source_id in available_ids}
+
+    # Single-pass partition: walk requested IDs once, deduping case-insensitively
+    # and routing each unique ID into either "unknown to system" or "known but
+    # unavailable to this agent." Preserves first-seen casing and request order.
+    seen: set[str] = set()
+    invalid_ids: list[str] = []
+    unavailable_for_agent: list[str] = []
+    for source_id in data_sources:
+        key = source_id.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        if key not in known_by_lower:
+            invalid_ids.append(source_id)
+        elif key not in available_by_lower:
+            unavailable_for_agent.append(source_id)
+
+    if not invalid_ids and not unavailable_for_agent:
+        return
+
+    parts: list[str] = []
+    if invalid_ids:
+        parts.append(f"Unknown data source(s): {', '.join(invalid_ids)}")
+    if unavailable_for_agent:
+        parts.append(f"Data source(s) are not available for agent '{agent_type}': {', '.join(unavailable_for_agent)}")
+    message = ". ".join(parts)
+
+    # Echo back the caller's request annotated with which IDs were unknown vs
+    # unavailable, plus the global registry list (which is also discoverable via
+    # /v1/data_sources). The per-agent capability list is intentionally NOT
+    # returned -- it's not exposed anywhere else and would reveal agent
+    # capability boundaries.
+    raise HTTPException(
+        status_code=422,
+        detail={
+            "message": message,
+            "invalid_ids": invalid_ids,
+            "unavailable_for_agent": unavailable_for_agent,
+            "known_ids": known_ids,
+        },
     )
 
 
@@ -163,8 +311,10 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
     from aiq_agent.common.data_source_registry import get_all_sources
     from nat.front_ends.fastapi.async_jobs.job_store import JobStatus
 
-    from ..jobs import EventStore
-    from ..jobs.runner import run_agent_job
+    from ..jobs.access import authorize_job_access
+    from ..jobs.access import ensure_job_access_table
+    from ..jobs.event_store import EventStore
+    from ..jobs.submit import submit_agent_job as submit_authorized_job
 
     if not get_all_sources():
         logger.warning(
@@ -237,13 +387,14 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
         db_url[:50],
         default_expiry_seconds,
     )
+    await asyncio.get_running_loop().run_in_executor(None, ensure_job_access_table, db_url)
 
     @app.get("/health", tags=["health"], summary="Health check")
     async def health_check():
         """Health check endpoint that validates DB connectivity."""
         from sqlalchemy import text
 
-        from ..jobs import EventStore
+        from ..jobs.event_store import EventStore
 
         result = {"status": "ok", "dask_available": dask_available, "db": "ok"}
 
@@ -276,53 +427,66 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
         ),
         responses={
             400: {"description": "Unknown agent type or invalid request"},
+            422: {"description": "One or more unknown or agent-unavailable data source IDs"},
             503: {"description": "Dask scheduler not available"},
         },
     )
-    async def submit_job(req: JobSubmitRequest, request: Request) -> JobStatusResponse:
+    async def submit_job(
+        req: Annotated[JobSubmitRequest, Body(openapi_examples=JOB_SUBMIT_EXAMPLES)],
+    ) -> JobStatusResponse:
         """Submit a new async job for deep research or other registered agents."""
         try:
             agent_config = get_agent_config(req.agent_type)
         except KeyError as e:
             raise HTTPException(400, str(e))
 
-        resolved_job_id = job_store.ensure_job_id(req.job_id)
         expiry = req.expiry_seconds if req.expiry_seconds is not None else default_expiry_seconds
+        # Authenticate the caller (raises 401/403 if unverified). The returned principal
+        # is also forwarded to submit_authorized_job(...) below for ownership recording.
+        principal = require_verified_principal()
+        validation_start = time.perf_counter()
+        await _validate_data_sources_for_agent(
+            builder=builder,
+            agent_type=req.agent_type,
+            agent_config_name=agent_config.config_name,
+            data_sources=req.data_sources,
+        )
+        logger.info(
+            "Validated data_sources for agent %s in %.1fms (requested=%s)",
+            req.agent_type,
+            (time.perf_counter() - validation_start) * 1000,
+            len(req.data_sources) if req.data_sources is not None else "none",
+        )
 
         # Propagate auth token to Dask worker for requires_auth data sources
         from aiq_agent.auth import get_auth_token
 
         auth_token = get_auth_token()
+        try:
+            job_id = await submit_authorized_job(
+                agent_type=req.agent_type,
+                input_text=req.input,
+                owner=principal.email or principal.sub,
+                principal=principal,
+                job_id=req.job_id,
+                expiry_seconds=expiry,
+                data_sources=req.data_sources,
+                auth_token=auth_token,
+            )
+        except RuntimeError as e:
+            raise HTTPException(403, str(e))
+        except Exception as e:
+            logger.warning("Failed to submit authorized job: %s", e)
+            raise HTTPException(500, "Failed to persist async job authorization metadata")
 
-        job_args = [
-            not use_threads,  # configure_logging
-            log_level,
-            scheduler_address,
-            db_url,
-            config_path,
-            resolved_job_id,
-            req.input,
-            agent_config.class_path,
-            agent_config.config_name,
-            None,  # parent_span_id
-            None,  # parent_function_id
-            None,  # parent_function_name
-            None,  # parent_workflow_run_id
-            None,  # parent_workflow_trace_id
-            None,  # parent_conversation_id
-            None,  # available_documents
-            None,  # data_sources
-            auth_token,  # auth_token
-        ]
-
-        job_id, _ = await job_store.submit_job(
-            job_id=resolved_job_id,
-            expiry_seconds=expiry,
-            job_fn=run_agent_job,
-            job_args=job_args,
+        logger.info(
+            "Submitted %s job %s (expiry=%ds) for principal %s:%s",
+            req.agent_type,
+            job_id,
+            expiry,
+            principal.type,
+            principal.sub,
         )
-
-        logger.info("Submitted %s job %s (expiry=%ds)", req.agent_type, job_id, expiry)
         return JobStatusResponse(
             job_id=job_id,
             status=JobStatus.SUBMITTED.value,
@@ -337,11 +501,10 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
         description="Get the current status of an async job by its ID.",
         responses={404: {"description": "Job not found"}},
     )
-    async def get_job_status(job_id: str, request: Request) -> JobStatusResponse:
+    async def get_job_status(job_id: str) -> JobStatusResponse:
         """Get the current status of a job."""
-        job = await job_store.get_job(job_id)
-        if not job:
-            raise HTTPException(404, f"Job not found: {job_id}")
+        principal = require_verified_principal()
+        job = await authorize_job_access(job_store, db_url, job_id, principal)
 
         return JobStatusResponse(
             job_id=job_id,
@@ -360,11 +523,10 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
         ),
         responses={404: {"description": "Job not found"}},
     )
-    async def stream_job_events(job_id: str, request: Request) -> StreamingResponse:
+    async def stream_job_events(job_id: str) -> StreamingResponse:
         """SSE stream for job events from beginning."""
-        job = await job_store.get_job(job_id)
-        if not job:
-            raise HTTPException(404, f"Job not found: {job_id}")
+        principal = require_verified_principal()
+        await authorize_job_access(job_store, db_url, job_id, principal)
 
         return StreamingResponse(
             _sse_generator(job_store, job_id, db_url, start_event_id=0),
@@ -379,11 +541,10 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
         description="Resume an SSE stream from a specific event ID. Use for reconnection after network interruption.",
         responses={404: {"description": "Job not found"}},
     )
-    async def stream_job_events_from(job_id: str, last_event_id: int, request: Request) -> StreamingResponse:
+    async def stream_job_events_from(job_id: str, last_event_id: int) -> StreamingResponse:
         """SSE stream for job events from specific event ID (for reconnection)."""
-        job = await job_store.get_job(job_id)
-        if not job:
-            raise HTTPException(404, f"Job not found: {job_id}")
+        principal = require_verified_principal()
+        await authorize_job_access(job_store, db_url, job_id, principal)
 
         return StreamingResponse(
             _sse_generator(job_store, job_id, db_url, start_event_id=last_event_id),
@@ -401,11 +562,10 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
             404: {"description": "Job not found"},
         },
     )
-    async def cancel_job(job_id: str, request: Request) -> dict:
+    async def cancel_job(job_id: str) -> dict:
         """Cancel a running job."""
-        job = await job_store.get_job(job_id)
-        if not job:
-            raise HTTPException(404, f"Job not found: {job_id}")
+        principal = require_verified_principal()
+        job = await authorize_job_access(job_store, db_url, job_id, principal)
 
         if job.status != JobStatus.RUNNING.value:
             raise HTTPException(400, f"Job not running: {job_id} (status: {job.status})")
@@ -434,11 +594,10 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
         description="Get tool calls, outputs, and sources collected during job execution.",
         responses={404: {"description": "Job not found"}},
     )
-    async def get_job_state(job_id: str, request: Request) -> JobStateResponse:
+    async def get_job_state(job_id: str) -> JobStateResponse:
         """Get artifacts from event store."""
-        job = await job_store.get_job(job_id)
-        if not job:
-            raise HTTPException(404, f"Job not found: {job_id}")
+        principal = require_verified_principal()
+        await authorize_job_access(job_store, db_url, job_id, principal)
 
         artifacts = await _get_job_artifacts(db_url, job_id)
         return JobStateResponse(
@@ -456,11 +615,10 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
         description="Get the final research report from a completed job.",
         responses={404: {"description": "Job not found"}},
     )
-    async def get_job_report(job_id: str, request: Request) -> JobReportResponse:
+    async def get_job_report(job_id: str) -> JobReportResponse:
         """Get the final report from a completed job."""
-        job = await job_store.get_job(job_id)
-        if not job:
-            raise HTTPException(404, f"Job not found: {job_id}")
+        principal = require_verified_principal()
+        job = await authorize_job_access(job_store, db_url, job_id, principal)
 
         report = None
         if job.output:
@@ -499,7 +657,7 @@ def _find_stale_jobs(db_url: str, running_status: str) -> list[str]:
     from sqlalchemy import inspect
     from sqlalchemy import text
 
-    from ..jobs import EventStore
+    from ..jobs.event_store import EventStore
 
     EventStore._ensure_table_exists(db_url)
     engine = EventStore._get_or_create_sync_engine(db_url)
@@ -544,7 +702,7 @@ async def _reap_ghost_jobs(job_store, db_url: str) -> None:
     """
     from nat.front_ends.fastapi.async_jobs.job_store import JobStatus
 
-    from ..jobs import EventStore
+    from ..jobs.event_store import EventStore
 
     logger.info(
         "Ghost job reaper started (timeout=%ds, interval=%ds)",
@@ -704,11 +862,12 @@ async def _run_event_cleanup(db_url: str, retention_seconds: int, is_postgres: b
     so concurrent pods skip the cycle rather than doing redundant work. The lock is
     automatically released on commit/rollback, avoiding leak risks.
     """
-    from ..jobs import EventStore
+    from ..jobs.access import cleanup_job_access
+    from ..jobs.event_store import EventStore
 
     loop = asyncio.get_running_loop()
 
-    def _do_cleanup() -> tuple[int, int]:
+    def _do_cleanup() -> tuple[int, int, int]:
         from sqlalchemy import text
 
         engine = EventStore._get_or_create_sync_engine(db_url)
@@ -723,7 +882,7 @@ async def _run_event_cleanup(db_url: str, retention_seconds: int, is_postgres: b
                     {"lock_id": _PG_ADVISORY_LOCK_ID},
                 ).scalar()
                 if not locked:
-                    return (0, 0)
+                    return (0, 0, 0)
 
             # 1. Time-based: delete events older than retention period
             if is_postgres:
@@ -745,17 +904,19 @@ async def _run_event_cleanup(db_url: str, retention_seconds: int, is_postgres: b
                 text("DELETE FROM job_events WHERE job_id IN (SELECT job_id FROM job_info WHERE is_expired = true)")
             )
             expired_deleted = expired_result.rowcount
+            access_deleted = cleanup_job_access(db_url, conn=conn)
 
             conn.commit()
-            return (time_deleted, expired_deleted)
+            return (time_deleted, expired_deleted, access_deleted)
 
-    time_deleted, expired_deleted = await loop.run_in_executor(None, _do_cleanup)
+    time_deleted, expired_deleted, access_deleted = await loop.run_in_executor(None, _do_cleanup)
 
-    if time_deleted > 0 or expired_deleted > 0:
+    if time_deleted > 0 or expired_deleted > 0 or access_deleted > 0:
         logger.info(
-            "Event cleanup: %d old events removed, %d events for expired jobs removed",
+            "Event cleanup: %d old events removed, %d events for expired jobs removed, %d access rows removed",
             time_deleted,
             expired_deleted,
+            access_deleted,
         )
 
 
@@ -925,7 +1086,7 @@ async def _get_job_artifacts(db_url: str, job_id: str) -> dict | None:
     Returns:
         Dict with 'tools', 'outputs', and 'sources' (counts), or None if no artifacts found.
     """
-    from ..jobs import EventStore
+    from ..jobs.event_store import EventStore
 
     try:
         events = await EventStore.get_events_async(db_url, job_id, 0, 10000)
@@ -976,7 +1137,7 @@ async def _sse_generator(job_store, job_id: str, db_url: str, start_event_id: in
     PostgreSQL: Uses LISTEN/NOTIFY for real-time push-based events (sub-10ms latency).
     SQLite: Uses polling (0.5s interval) since SQLite doesn't support pub-sub.
     """
-    from ..jobs import EventStore
+    from ..jobs.event_store import EventStore
 
     if EventStore.is_postgres(db_url):
         try:
@@ -1004,8 +1165,8 @@ async def _sse_generator_postgres(job_store, job_id: str, db_url: str, start_eve
 
     from nat.front_ends.fastapi.async_jobs.job_store import JobStatus
 
-    from ..jobs import EventStore
-    from ..jobs import get_connection_manager
+    from ..jobs.connection_manager import get_connection_manager
+    from ..jobs.event_store import EventStore
 
     connection_manager = get_connection_manager()
     last_status = None
@@ -1188,8 +1349,8 @@ async def _sse_generator_polling(job_store, job_id: str, db_url: str, start_even
 
     from nat.front_ends.fastapi.async_jobs.job_store import JobStatus
 
-    from ..jobs import EventStore
-    from ..jobs import get_connection_manager
+    from ..jobs.connection_manager import get_connection_manager
+    from ..jobs.event_store import EventStore
 
     connection_manager = get_connection_manager()
     last_status = None
