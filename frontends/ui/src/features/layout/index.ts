@@ -20,10 +20,8 @@ export {
 // Research panel and related components
 export {
   ResearchPanel,
-  PlanTab,
   TasksTab,
   ThinkingTab,
-  CitationsTab,
   ReportTab,
   ReportCard,
   ExportFooter,
@@ -63,7 +61,6 @@ export {
 
 // Data Sources Types
 export type { DataSource, DataSourceCategory } from './data-sources'
-export { WEB_SEARCH_SOURCE_ID, API_KEY_SOURCE_IDS } from './data-sources'
 
 // Store
 export { useLayoutStore } from './store'

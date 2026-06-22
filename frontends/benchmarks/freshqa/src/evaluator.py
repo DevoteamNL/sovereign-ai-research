@@ -672,6 +672,7 @@ class FreshQAEvaluator(BaseEvaluator):
         from nat.plugins.eval.utils.tqdm_position_registry import TqdmPositionRegistry
 
         pbar = None
+        tqdm_position = None
         try:
             tqdm_position = TqdmPositionRegistry.claim()
             pbar = tqdm(
@@ -699,6 +700,7 @@ class FreshQAEvaluator(BaseEvaluator):
         finally:
             if pbar:
                 pbar.close()
+            if tqdm_position is not None:
                 TqdmPositionRegistry.release(tqdm_position)
 
         result = self._compute_metrics(list(output_items))

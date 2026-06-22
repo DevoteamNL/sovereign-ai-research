@@ -16,7 +16,7 @@ export type ThemeMode = 'light' | 'dark' | 'system'
 export type RightPanelType = 'research' | 'data-sources' | 'settings' | null
 
 /** Tabs within the Research panel */
-export type ResearchPanelTab = 'plan' | 'tasks' | 'thinking' | 'citations' | 'report'
+export type ResearchPanelTab = 'tasks' | 'thinking' | 'report'
 
 /** Tabs within the DataSources panel */
 export type DataSourcesPanelTab = 'connections' | 'files'
@@ -75,8 +75,8 @@ export interface LayoutActions {
   setTheme: (theme: ThemeMode) => void
   /** Fetch data sources from API. Only web_search is enabled by default */
   fetchDataSources: (authToken?: string) => Promise<void>
-  /** Disable all non-web sources (keep only web_search enabled) */
-  disableNonWebSources: () => void
+  /** Disable sources that require authentication */
+  disableAuthRequiredSources: () => void
   /** Set available data sources (from API) */
   setAvailableDataSources: (sources: DataSourceFromAPI[]) => void
   /** Set knowledge layer availability */

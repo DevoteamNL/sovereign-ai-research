@@ -97,10 +97,15 @@ class DummyStepAdaptor:
 
 
 class DummyWorker:
-    """Minimal FastApiFrontEndPluginWorker stub (NAT 1.6 added worker as a
-    required positional arg on WebSocketMessageHandler.__init__)."""
+    """Minimal FastApiFrontEndPluginWorker stand-in (NAT handler requires worker)."""
 
-    def set_conversation_handler(self, _conversation_id, _handler) -> None:
+    def set_conversation_handler(self, _conversation_id: str, _handler: object) -> None:
+        return None
+
+    def get_conversation_handler(self, _conversation_id: str) -> object | None:
+        return None
+
+    def remove_conversation_handler(self, _conversation_id: str) -> None:
         return None
 
 

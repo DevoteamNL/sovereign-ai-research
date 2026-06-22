@@ -37,6 +37,7 @@ from pydantic import Field
 
 from aiq_agent.common import LLMProvider
 from aiq_agent.common import VerboseTraceCallback
+from aiq_agent.common import all_mapped_tools_filtered_out
 from aiq_agent.common import filter_tools_by_sources
 from aiq_agent.common import is_verbose
 from nat.builder.builder import Builder
@@ -79,7 +80,11 @@ class ClarifierConfig(FunctionBaseConfig, name="clarifier_agent"):
     )
     tools: list[FunctionRef | FunctionGroupRef] = Field(
         default_factory=list,
-        description="Tools available for clarification context",
+        description="Explicit tool list. Empty = inherit all from data_source_registry.",
+    )
+    exclude_tools: list[str] = Field(
+        default_factory=list,
+        description="Tool names to exclude when inheriting from registry.",
     )
     max_turns: int = Field(
         default=3,
@@ -137,10 +142,21 @@ async def clarifier_agent(config: ClarifierConfig, builder: Builder):
             config.planner_llm,
             wrapper_type=LLMFrameworkEnum.LANGCHAIN,
         )
+    if config.tools:
+        tool_refs = config.tools
+    else:
+        from aiq_agent.common import get_all_tool_refs
+
+        tool_refs = get_all_tool_refs()
+
     tools = await builder.get_tools(
-        tool_names=config.tools,
+        tool_names=tool_refs,
         wrapper_type=LLMFrameworkEnum.LANGCHAIN,
     )
+
+    if config.exclude_tools:
+        excluded = set(config.exclude_tools)
+        tools = [t for t in tools if getattr(t, "name", "") not in excluded]
 
     provider = LLMProvider()
     provider.set_default(llm)
@@ -210,7 +226,8 @@ async def clarifier_agent(config: ClarifierConfig, builder: Builder):
                 verbose=verbose,
                 callbacks=callbacks,
             )
-        elif data_sources is not None and not selected_tools:
+
+        if all_mapped_tools_filtered_out(tools, selected_tools, data_sources):
             logger.warning("Clarifier received data_sources with no matching tools")
         return await active_agent.run(state)
 

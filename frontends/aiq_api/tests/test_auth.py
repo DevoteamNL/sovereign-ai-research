@@ -20,7 +20,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import time
 import types
 from datetime import UTC
 from datetime import datetime
@@ -187,14 +186,12 @@ class TestJWTValidatorGetSigningKey:
         assert validator._jwks_uri == "https://issuer/jwks"
 
     def test_matches_key_by_kid(self) -> None:
+        import time
 
         validator = JWTValidator("https://issuer.example", jwks_uri="https://issuer/jwks")
         k1, k2 = MagicMock(), MagicMock()
         validator._cached_keys = [("kid-1", k1), ("kid-2", k2)]
-        # Mark the cache as just-fetched so the TTL check is uptime-independent.
-        # Upstream's `_jwks_keys_fetched_at = 0.0` here makes the test flaky on
-        # long-uptime hosts where `time.monotonic()` exceeds `_jwks_cache_ttl`.
-        validator._jwks_keys_fetched_at = time.monotonic()
+        validator._jwks_keys_fetched_at = time.monotonic()  # mark as freshly fetched
         validator._jwks_cache_ttl = 999999.0
         with patch("jwt.get_unverified_header", return_value={"kid": "kid-2"}):
             assert validator._get_signing_key("t") is k2

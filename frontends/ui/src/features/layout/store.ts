@@ -19,12 +19,11 @@ import type {
   ThemeMode,
 } from './types'
 import { createDataSourcesClient, type DataSourceFromAPI } from '@/adapters/api'
-import { API_KEY_SOURCE_IDS } from './data-sources'
 
 const initialState: LayoutState = {
   isSessionsPanelOpen: false,
-  rightPanel: null,
-  researchPanelTab: 'plan',
+  rightPanel: 'data-sources',
+  researchPanelTab: 'tasks',
   dataSourcesPanelTab: 'connections',
   enabledDataSourceIds: [], // Start empty, populated when data sources are fetched
   theme: 'system',
@@ -89,11 +88,9 @@ export const useLayoutStore = create<LayoutStore>()(
           const client = createDataSourcesClient({ authToken })
           const response = await client.getDataSources()
 
-          // data_sources is already filtered (knowledge_layer removed) by the client
-          // Enable all API-key sources by default (web, paper, news) — they use backend keys
-          const enabledIds = response.data_sources
-            .filter((source) => API_KEY_SOURCE_IDS.has(source.id))
-            .map((source) => source.id)
+          // Start with every returned source enabled. Auth-aware cleanup still
+          // runs through disableAuthRequiredSources when a user loses access.
+          const enabledIds = response.data_sources.map((source) => source.id)
 
           set(
             {
@@ -119,15 +116,16 @@ export const useLayoutStore = create<LayoutStore>()(
         }
       },
 
-      disableNonWebSources: () =>
+      disableAuthRequiredSources: () =>
         set(
           (state) => ({
-            enabledDataSourceIds: state.enabledDataSourceIds.filter(
-              (id) => API_KEY_SOURCE_IDS.has(id)
-            ),
+            enabledDataSourceIds: state.enabledDataSourceIds.filter((id) => {
+              const source = state.availableDataSources?.find((s) => s.id === id)
+              return !source?.requires_auth
+            }),
           }),
           false,
-          'disableNonWebSources'
+          'disableAuthRequiredSources'
         ),
 
       setAvailableDataSources: (sources: DataSourceFromAPI[]) =>

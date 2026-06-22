@@ -190,6 +190,44 @@ def _load_agent_class(agent_class_path: str) -> type:
     return getattr(module, class_name)
 
 
+async def _create_llm_provider(builder: Any, fn_config: Any) -> tuple[Any, Any]:
+    """Create a role-aware LLM provider from a NAT function config."""
+    from aiq_agent.common import LLMProvider
+    from aiq_agent.common import LLMRole
+    from nat.builder.framework_enum import LLMFrameworkEnum
+
+    role_config_attrs = (
+        (LLMRole.ORCHESTRATOR, "orchestrator_llm"),
+        (LLMRole.ROUTER, "source_router_llm"),
+        (LLMRole.PLANNER, "planner_llm"),
+        (LLMRole.RESEARCHER, "researcher_llm"),
+        (LLMRole.REPORT_WRITER, "writer_llm"),
+    )
+    llm_cache: dict[Any, Any] = {}
+    role_llms = {}
+    for role, config_attr in role_config_attrs:
+        llm_ref = getattr(fn_config, config_attr, None)
+        if llm_ref:
+            if llm_ref not in llm_cache:
+                llm_cache[llm_ref] = await builder.get_llm(llm_ref, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
+            role_llms[role] = llm_cache[llm_ref]
+
+    default_llm = role_llms.get(LLMRole.ORCHESTRATOR)
+    if default_llm is None:
+        llm_ref = getattr(fn_config, "llm", None)
+        if llm_ref:
+            if llm_ref not in llm_cache:
+                llm_cache[llm_ref] = await builder.get_llm(llm_ref, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
+            default_llm = llm_cache[llm_ref]
+
+    provider = LLMProvider()
+    provider.set_default(default_llm)
+    for role, llm in role_llms.items():
+        provider.configure(role, llm)
+
+    return provider, default_llm
+
+
 async def run_agent_job(
     configure_logging: bool,
     log_level: int,
@@ -238,6 +276,9 @@ async def run_agent_job(
         parent_conversation_id: Conversation ID for session grouping in Phoenix.
         request_trace_tags: Request trace tags captured at async submission time.
         available_documents: Optional list of document dicts with file_name and summary.
+        data_sources: Optional list of allowed data sources to enforce in the worker.
+        auth_token: Optional auth token propagated from the HTTP request for
+            data sources that require authentication (requires_auth: true).
     """
 
     # Propagate auth token into the current async task's context so tools
@@ -254,8 +295,6 @@ async def run_agent_job(
 
     install_request_trace_span_injection()
 
-    from aiq_agent.common import LLMProvider
-    from aiq_agent.common import LLMRole
     from aiq_agent.common import VerboseTraceCallback
     from aiq_agent.common import is_verbose
     from nat.builder.framework_enum import LLMFrameworkEnum
@@ -303,32 +342,22 @@ async def run_agent_job(
         async with WorkflowBuilder.from_config(config=config) as builder:
             fn_config = builder.get_function_config(agent_config_name)
 
-            # Resolve LLMs. Agent configs differ in shape:
-            #   deep_research_agent has orchestrator_llm / planner_llm / researcher_llm
-            #   shallow_research_agent has a single `llm` field
-            orchestrator_llm = None
-            planner_llm = None
-            researcher_llm = None
-            if hasattr(fn_config, "orchestrator_llm") and fn_config.orchestrator_llm:
-                orchestrator_llm = await builder.get_llm(
-                    fn_config.orchestrator_llm, wrapper_type=LLMFrameworkEnum.LANGCHAIN
-                )
-            if hasattr(fn_config, "planner_llm") and fn_config.planner_llm:
-                planner_llm = await builder.get_llm(fn_config.planner_llm, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
-            if hasattr(fn_config, "researcher_llm") and fn_config.researcher_llm:
-                researcher_llm = await builder.get_llm(
-                    fn_config.researcher_llm, wrapper_type=LLMFrameworkEnum.LANGCHAIN
-                )
+            provider, llm = await _create_llm_provider(builder, fn_config)
 
-            # Primary LLM: orchestrator for deep research, single `llm` for shallow/other single-LLM agents.
-            if orchestrator_llm is not None:
-                llm = orchestrator_llm
-            elif hasattr(fn_config, "llm") and fn_config.llm:
-                llm = await builder.get_llm(fn_config.llm, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
-            else:
-                raise ValueError(f"Agent config {agent_config_name!r} has neither 'orchestrator_llm' nor 'llm'")
+            # Resolve tools: use explicit list or auto-inherit from data_source_registry
+            tool_refs = fn_config.tools
+            if not tool_refs:
+                from aiq_agent.common import get_all_tool_refs
 
-            tools = await builder.get_tools(tool_names=fn_config.tools, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
+                tool_refs = get_all_tool_refs()
+
+            tools = await builder.get_tools(tool_names=tool_refs, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
+
+            # Apply per-agent exclusions (e.g. deep_research excludes web_search_tool)
+            if hasattr(fn_config, "exclude_tools") and fn_config.exclude_tools:
+                excluded = set(fn_config.exclude_tools)
+                tools = [t for t in tools if getattr(t, "name", "") not in excluded]
+
             if data_sources is not None:
                 from aiq_agent.common import filter_tools_by_sources
 
@@ -428,16 +457,6 @@ async def run_agent_job(
                     # Create profiler callback AFTER workflow starts (ensures correct parent)
                     nat_profiler_callback = LangchainProfilerHandler()
 
-                    # Set up LLM provider
-                    provider = LLMProvider()
-                    provider.set_default(llm)
-                    if orchestrator_llm:
-                        provider.configure(LLMRole.ORCHESTRATOR, orchestrator_llm)
-                    if planner_llm:
-                        provider.configure(LLMRole.PLANNER, planner_llm)
-                    if researcher_llm:
-                        provider.configure(LLMRole.RESEARCHER, researcher_llm)
-
                     verbose = is_verbose(getattr(fn_config, "verbose", False))
                     callbacks = [VerboseTraceCallback()] if verbose else []
 
@@ -455,6 +474,7 @@ async def run_agent_job(
                         fn_config=fn_config,
                         verbose=verbose,
                         callbacks=callbacks,
+                        job_id=job_id,
                     )
 
                     # Run agent - LLM/tool events will be nested under workflow span
@@ -549,6 +569,11 @@ async def run_agent_job(
             event_store.flush()
         if cancellation_monitor:
             cancellation_monitor.stop()
+        # Clean up job-scoped auth token
+        if _auth_token_reset is not None:
+            from ._auth_context import job_auth_token
+
+            job_auth_token.reset(_auth_token_reset)
 
 
 def _create_agent_instance(
@@ -559,6 +584,7 @@ def _create_agent_instance(
     fn_config,
     verbose: bool,
     callbacks: list,
+    job_id: str | None = None,
 ):
     """
     Create an agent instance, filtering kwargs to what the constructor accepts.
@@ -572,16 +598,41 @@ def _create_agent_instance(
     raises TypeError for an unrelated reason), we introspect the constructor
     signature and pass only the kwargs it accepts.
     """
-    candidates = {
-        "llm_provider": llm_provider,
-        "llm": llm,
-        "tools": tools,
-        "max_loops": getattr(fn_config, "max_loops", None),
-        "max_llm_turns": getattr(fn_config, "max_llm_turns", None),
-        "max_tool_iterations": getattr(fn_config, "max_tool_iterations", None),
-        "verbose": verbose,
-        "callbacks": callbacks,
-    }
+    # Try async deep_researcher pattern with generic function config and job-scoped runtime state.
+    try:
+        return agent_cls(
+            llm_provider=llm_provider,
+            tools=tools,
+            verbose=verbose,
+            callbacks=callbacks,
+            config=fn_config,
+            job_id=job_id,
+        )
+    except TypeError as exc:
+        if "unexpected keyword argument" not in str(exc):
+            raise
+
+    # Try original deep_researcher pattern (llm_provider + tools + verbose)
+    try:
+        return agent_cls(
+            llm_provider=llm_provider,
+            tools=tools,
+            verbose=verbose,
+            callbacks=callbacks,
+        )
+    except TypeError:
+        pass
+
+    # Try llm_provider + tools pattern (ShallowResearcherAgent style)
+    try:
+        return agent_cls(
+            llm_provider=llm_provider,
+            tools=tools,
+            max_tool_iterations=getattr(fn_config, "max_tool_iterations", 5),
+            callbacks=callbacks,
+        )
+    except TypeError:
+        pass
 
     sig = inspect.signature(agent_cls.__init__)
     accepted = set(sig.parameters)

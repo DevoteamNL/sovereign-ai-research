@@ -659,7 +659,11 @@ class DeepSearchQAEvaluator(BaseEvaluator):
         tqdm_position = None
         try:
             tqdm_position = TqdmPositionRegistry.claim()
-            pbar = tqdm(total=len(eval_input.eval_input_items), desc=self.tqdm_desc, position=tqdm_position)
+            pbar = tqdm(
+                total=len(eval_input.eval_input_items),
+                desc=self.tqdm_desc,
+                position=tqdm_position,
+            )
 
             async def wrapped(item):
                 async with self.semaphore:

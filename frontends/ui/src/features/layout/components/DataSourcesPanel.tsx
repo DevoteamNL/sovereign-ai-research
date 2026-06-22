@@ -10,13 +10,14 @@
 
 'use client'
 
-import { type FC, useCallback, useMemo } from 'react'
+import { type FC, memo, useCallback, useMemo } from 'react'
 import { Flex, Text, SidePanel, SegmentedControl, Switch, Button, Banner } from '@/adapters/ui'
+import { useShallow } from 'zustand/react/shallow'
 import { Globe, LoadingSpinner } from '@/adapters/ui/icons'
 import { useAuth } from '@/adapters/auth'
 import { useLayoutStore } from '../store'
 import { useIsCurrentSessionBusy, useChatStore } from '@/features/chat'
-import { type DataSource, API_KEY_SOURCE_IDS } from '../data-sources'
+import type { DataSource } from '../data-sources'
 import { DataConnectionCard } from './DataConnectionCard'
 import { FileSourcesTab } from './FileSourcesTab'
 import { UploadOrchestrator } from '@/features/documents'
@@ -33,31 +34,36 @@ interface DataSourcesPanelProps {
  * Panel for managing data sources and file uploads.
  * Opens from the right side of the screen.
  */
-export const DataSourcesPanel: FC<DataSourcesPanelProps> = ({ onSourceToggle, onDeleteFile }) => {
+export const DataSourcesPanel: FC<DataSourcesPanelProps> = memo(function DataSourcesPanel({ onSourceToggle, onDeleteFile }) {
   const { idToken, authRequired } = useAuth()
   const saveDataSourcesToConversation = useChatStore(
     (state) => state.saveDataSourcesToConversation
   )
 
+  const isOpen = useLayoutStore((s) => s.rightPanel === 'data-sources')
   const {
-    rightPanel,
-    closeRightPanel,
-    openRightPanel,
     dataSourcesPanelTab,
-    setDataSourcesPanelTab,
     enabledDataSourceIds,
-    toggleDataSource,
-    setEnabledDataSources,
     availableDataSources,
     dataSourcesLoading,
     dataSourcesError,
-    fetchDataSources,
-  } = useLayoutStore()
+  } = useLayoutStore(useShallow((s) => ({
+    dataSourcesPanelTab: s.dataSourcesPanelTab,
+    enabledDataSourceIds: s.enabledDataSourceIds,
+    availableDataSources: s.availableDataSources,
+    dataSourcesLoading: s.dataSourcesLoading,
+    dataSourcesError: s.dataSourcesError,
+  })))
+
+  const closeRightPanel = useLayoutStore((s) => s.closeRightPanel)
+  const openRightPanel = useLayoutStore((s) => s.openRightPanel)
+  const setDataSourcesPanelTab = useLayoutStore((s) => s.setDataSourcesPanelTab)
+  const toggleDataSource = useLayoutStore((s) => s.toggleDataSource)
+  const setEnabledDataSources = useLayoutStore((s) => s.setEnabledDataSources)
+  const fetchDataSources = useLayoutStore((s) => s.fetchDataSources)
 
   // Check if current session is busy with operations
   const isBusy = useIsCurrentSessionBusy()
-
-  const isOpen = rightPanel === 'data-sources'
 
   // Check if user has valid auth token
   const hasValidToken = !!idToken
@@ -76,12 +82,13 @@ export const DataSourcesPanel: FC<DataSourcesPanelProps> = ({ onSourceToggle, on
       description: source.description ?? '',
       category: source.category ?? 'enterprise',
       defaultEnabled: true,
+      requiresAuth: source.requires_auth ?? false,
     }))
   }, [availableDataSources])
 
-  // Check if there are authenticated sources (sources that require user auth, not just backend API keys)
+  // Check if any sources require authentication
   const hasAuthenticatedSources = useMemo(() => {
-    return displaySources.some((source) => !API_KEY_SOURCE_IDS.has(source.id))
+    return displaySources.some((source) => source.requiresAuth)
   }, [displaySources])
 
   const handleOpenChange = useCallback(
@@ -123,10 +130,10 @@ export const DataSourcesPanel: FC<DataSourcesPanelProps> = ({ onSourceToggle, on
     [setDataSourcesPanelTab]
   )
 
-  // Get only available sources (API-key sources always available, others need user auth)
+  // Sources are available unless they require auth and the user has no token
   const availableSources = useMemo(() => {
     return displaySources.filter(
-      (source) => API_KEY_SOURCE_IDS.has(source.id) || hasValidToken
+      (source) => !source.requiresAuth || hasValidToken
     )
   }, [displaySources, hasValidToken])
 
@@ -145,7 +152,7 @@ export const DataSourcesPanel: FC<DataSourcesPanelProps> = ({ onSourceToggle, on
 
   return (
     <SidePanel
-      className="bg-surface-base top-[var(--header-height)] h-[calc(100vh-var(--header-height))] w-[406px] rounded-l-2xl"
+      className="side-panel-dock-under-header bg-surface-base top-[var(--header-height)] h-[calc(100vh-var(--header-height))] w-[406px]"
       open={isOpen}
       onOpenChange={handleOpenChange}
       side="right"
@@ -290,9 +297,7 @@ export const DataSourcesPanel: FC<DataSourcesPanelProps> = ({ onSourceToggle, on
           ) : (
             <Flex direction="col" gap="2">
               {displaySources.map((source) => {
-                // API-key sources work without user auth; others require sign-in
-                const isAuthenticatedSource = !API_KEY_SOURCE_IDS.has(source.id)
-                const isSourceAvailable = !isAuthenticatedSource || hasValidToken
+                const isSourceAvailable = !source.requiresAuth || hasValidToken
                 return (
                   <DataConnectionCard
                     key={source.id}
@@ -316,4 +321,4 @@ export const DataSourcesPanel: FC<DataSourcesPanelProps> = ({ onSourceToggle, on
       )}
     </SidePanel>
   )
-}
+})
