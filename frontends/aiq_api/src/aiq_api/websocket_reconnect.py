@@ -306,8 +306,8 @@ class ReconnectableWebSocketMessageHandler(WebSocketMessageHandler):
 
                     user_content = await self._process_websocket_user_interaction_response_message(validated_message)
                     await _registry.set_socket(validated_message.conversation_id, self._socket)
-                    if self._user_interaction is not None and not self._user_interaction.future.done():
-                        self._user_interaction.future.set_result(user_content)
+                    if self._user_interaction_response is not None:
+                        self._user_interaction_response.set_result(user_content)
                     else:
                         resolved = await _registry.resolve_pending_interaction(
                             validated_message.conversation_id, user_content
@@ -451,11 +451,7 @@ class ReconnectableWebSocketMessageHandler(WebSocketMessageHandler):
         Handle HITL prompts and register response futures for reconnect.
         """
         human_response_future: asyncio.Future[TextContent] = asyncio.get_running_loop().create_future()
-        self._user_interaction = UserInteraction(
-            future=human_response_future,
-            prompt_content=prompt.content,
-            started_at=time.monotonic(),
-        )
+        self._user_interaction_response = human_response_future
         await _registry.register_pending_interaction(self._conversation_id, human_response_future)
 
         try:
@@ -475,7 +471,7 @@ class ReconnectableWebSocketMessageHandler(WebSocketMessageHandler):
             return interaction_response
         finally:
             await _registry.clear_pending_interaction(self._conversation_id)
-            self._user_interaction = None
+            self._user_interaction_response = None
 
     async def _run_workflow(
         self,

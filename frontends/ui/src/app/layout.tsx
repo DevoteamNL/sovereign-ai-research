@@ -63,7 +63,7 @@ const RootLayout = async ({ children }: RootLayoutProps): Promise<ReactNode> => 
           async
         />
       </head>
-      <body className="bg-surface-base" suppressHydrationWarning>
+      <body className="bg-surface-base">
         <Providers config={config}>{children}</Providers>
       </body>
     </html>

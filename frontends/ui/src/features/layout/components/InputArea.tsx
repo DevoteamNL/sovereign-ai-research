@@ -346,7 +346,7 @@ export const InputArea: FC<InputAreaProps> = memo(function InputArea({
       <Flex
         direction="col"
         className={`
-          bg-surface-raised relative rounded-2xl border border-base p-4 transition-colors
+          bg-surface-raised relative rounded-2xl border border-black p-4 transition-colors
           ${isDisabledByAuth ? 'opacity-60' : ''}
           ${isDragging && isUnsupportedDrag ? 'border-error border-dashed' : isDragging ? 'border-brand border-dashed' : ''}
         `}

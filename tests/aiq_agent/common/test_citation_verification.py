@@ -671,6 +671,44 @@ class TestVerifyCitations:
         assert len(result.valid_citations) == 2
         assert len(result.removed_citations) == 0
 
+    def test_ordered_list_references_are_normalized_and_verified(self, registry):
+        report = (
+            "Finding one [1]. Finding two [2].\n\n"
+            "## Sources\n"
+            "1. Article 1: https://valid.com/article1\n"
+            "2. Article 2: https://valid.com/article2"
+        )
+        result = verify_citations(report, registry)
+
+        assert "[1] Article 1: https://valid.com/article1" in result.verified_report
+        assert "[2] Article 2: https://valid.com/article2" in result.verified_report
+        assert len(result.valid_citations) == 2
+        assert not result.removed_citations
+
+    def test_invalid_ordered_list_reference_is_removed(self, registry):
+        report = (
+            "Good finding [1]. Bad finding [2].\n\n"
+            "## Sources\n"
+            "1. Article 1: https://valid.com/article1\n"
+            "2. Fake Source: https://fake.com/nonexistent"
+        )
+        result = verify_citations(report, registry)
+
+        assert len(result.valid_citations) == 1
+        assert len(result.removed_citations) == 1
+        assert result.removed_citations[0]["number"] == 2
+        assert result.removed_citations[0]["reason"] == "url_not_in_registry"
+        assert "Good finding [1]. Bad finding ." in result.verified_report
+        assert "Fake Source" not in result.verified_report
+
+    def test_ordered_list_parenthesis_references_are_normalized_and_verified(self, registry):
+        report = "Finding [1].\n\n## Sources\n1) Article 1: https://valid.com/article1"
+        result = verify_citations(report, registry)
+
+        assert "[1] Article 1: https://valid.com/article1" in result.verified_report
+        assert len(result.valid_citations) == 1
+        assert not result.removed_citations
+
     def test_url_in_markdown_brackets_still_verifies(self, registry):
         """Regression: when the LLM wraps a citation URL in markdown brackets
         (``[https://valid.com/article1]``), the verifier captured the trailing

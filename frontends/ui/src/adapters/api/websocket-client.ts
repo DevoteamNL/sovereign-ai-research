@@ -136,15 +136,6 @@ export class NATWebSocketClient {
       const wsUrl = this.options.websocketUrl || (await getWebSocketUrl())
       this.ws = new WebSocket(wsUrl)
       this.setupEventHandlers()
-
-      // Guard against connections that hang in CONNECTING state forever
-      // (e.g. when the browser connects to a port without a WebSocket proxy).
-      this.connectTimeout = window.setTimeout(() => {
-        if (this.ws?.readyState === WebSocket.CONNECTING) {
-          console.warn('[WebSocket] Connection timeout — still CONNECTING after 10 s, closing')
-          this.ws.close()
-        }
-      }, 10_000)
     } catch {
       this.options.callbacks.onConnectionChange?.('error', { intentional: false })
       this.handleReconnect()
@@ -157,7 +148,6 @@ export class NATWebSocketClient {
   disconnect = (): void => {
     this.isIntentionallyClosed = true
     this.reconnectCount = 0
-    if (this.connectTimeout) { clearTimeout(this.connectTimeout); this.connectTimeout = null }
 
     if (this.ws) {
       this.ws.close()

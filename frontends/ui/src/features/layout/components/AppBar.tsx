@@ -74,20 +74,7 @@ export const AppBar: FC<AppBarProps> = memo(function AppBar({
     } else {
       openRightPanel('data-sources')
     }
-  }, [rightPanel, openRightPanel, closeRightPanel, isAuthenticated])
-
-  const handleSettingsClick = useCallback(() => {
-    if (!isAuthenticated) return
-    if (rightPanel === 'settings') {
-      closeRightPanel()
-    } else {
-      openRightPanel('settings')
-    }
-  }, [rightPanel, openRightPanel, closeRightPanel, isAuthenticated])
-
-  const handleDocsClick = useCallback(() => {
-    window.open('https://www.redhat.com/en/blog/introducing-ai-quickstarts', '_blank')
-  }, [])
+  }, [isAuthenticated])
 
   const handleNewSessionClick = useCallback(() => {
     if (!isAuthenticated || isNewSessionDisabled) return
@@ -255,7 +242,7 @@ const APPEARANCE_SEGMENTS: { mode: ThemeMode; label: string }[] = [
   { mode: 'light', label: 'Light' },
 ]
 
-const DOCS_URL = 'https://github.com/NVIDIA-AI-Blueprints/aiq/tree/develop/docs'
+const DOCS_URL = 'https://www.redhat.com/en/blog/introducing-ai-quickstarts'
 
 const AppearanceThemeControl: FC = () => {
   const theme = useLayoutStore((s) => s.theme)
@@ -333,12 +320,12 @@ const DocumentationSection: FC = () => {
         href={DOCS_URL}
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="Open GitHub Docs"
+        aria-label="Open Red Hat AI Docs"
         className="flex w-full items-center justify-between rounded-[var(--radius-md)] px-2 py-2 text-primary transition-colors hover:bg-surface-raised-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-border-focus,#76b900)]"
       >
         <Flex align="center" gap="2">
           <Book className="h-4 w-4 shrink-0" />
-          <Text kind="label/regular/sm">GitHub Docs</Text>
+          <Text kind="label/regular/sm">Red Hat AI Docs</Text>
         </Flex>
         <OpenExternal className="h-4 w-4 shrink-0 text-subtle" />
       </a>

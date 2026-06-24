@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import asyncio
 import importlib
-import inspect
 import logging
 import uuid
 from typing import Any
@@ -587,16 +586,11 @@ def _create_agent_instance(
     job_id: str | None = None,
 ):
     """
-    Create an agent instance, filtering kwargs to what the constructor accepts.
+    Create an agent instance, supporting different constructor patterns.
 
-    Different agents have different constructor shapes:
-      - DeepResearcherAgent:    (llm_provider, tools, max_loops, verbose, callbacks)
-      - ShallowResearcherAgent: (llm_provider, tools, max_llm_turns, max_tool_iterations, callbacks)
-      - Simple agents:          (llm, tools, callbacks)
-
-    Rather than cascade try/except TypeError (which is brittle if a constructor
-    raises TypeError for an unrelated reason), we introspect the constructor
-    signature and pass only the kwargs it accepts.
+    Tries in order:
+    1. llm_provider + tools pattern (DeepResearcherAgent style)
+    2. llm + tools pattern (simpler agents)
     """
     # Try async deep_researcher pattern with generic function config and job-scoped runtime state.
     try:
@@ -634,11 +628,18 @@ def _create_agent_instance(
     except TypeError:
         pass
 
-    sig = inspect.signature(agent_cls.__init__)
-    accepted = set(sig.parameters)
-    kwargs = {k: v for k, v in candidates.items() if k in accepted and v is not None}
+    # Try simpler llm + tools pattern
+    try:
+        return agent_cls(
+            llm=llm,
+            tools=tools,
+            callbacks=callbacks,
+        )
+    except TypeError:
+        pass
 
-    return agent_cls(**kwargs)
+    # Fallback: just callbacks
+    return agent_cls(callbacks=callbacks)
 
 
 async def _run_agent(

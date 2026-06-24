@@ -89,18 +89,6 @@ async def shallow_research_agent(config: ShallowResearchAgentConfig, builder: Bu
             "All queries will fail until at least one tool is properly configured.",
         )
 
-    from aiq_agent.common import validate_tool_availability
-
-    is_valid, available_count, unavailable = validate_tool_availability(
-        tools,
-        research_type="shallow research",
-    )
-    if not is_valid:
-        logger.warning(
-            "Startup check: no tools available for shallow research. "
-            "All queries will fail until at least one tool is properly configured.",
-        )
-
     provider = LLMProvider()
     provider.set_default(llm)
 

@@ -88,7 +88,7 @@ def render_prompt_template(template: str, **kwargs: Any) -> str:
         PromptError: If template rendering fails.
     """
     try:
-        jinja_template = jinja2.Template(template, undefined=jinja2.Undefined)
+        jinja_template = jinja2.Template(template, undefined=jinja2.StrictUndefined)
         return jinja_template.render(**kwargs)
     except jinja2.TemplateError as e:
         raise PromptError(f"Failed to render template: {e}") from e

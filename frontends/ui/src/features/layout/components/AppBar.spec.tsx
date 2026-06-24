@@ -162,7 +162,7 @@ describe('AppBar', () => {
 
     expect(screen.getByText('Appearance')).toBeInTheDocument()
     expect(screen.getByText('Documentation')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /github docs/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /red hat ai docs/i })).toBeInTheDocument()
   })
 
   describe('auth disabled mode', () => {
@@ -200,7 +200,7 @@ describe('AppBar', () => {
       const docsSection = screen.getByText('Documentation')
       expect(authNotice).toBeInTheDocument()
       expect(docsSection).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: /github docs/i })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /red hat ai docs/i })).toBeInTheDocument()
       expectElementBefore(authNotice, appearanceSection)
       expectElementBefore(appearanceSection, docsSection)
     })

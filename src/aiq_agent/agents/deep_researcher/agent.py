@@ -43,11 +43,6 @@ from .models import DeepResearchAgentState
 from .tools.source_tool_batching import DEFAULT_MAX_CONCURRENT_SOURCE_TOOL_CALLS
 from .tools.source_tool_batching import DEFAULT_MAX_SOURCE_TOOL_BATCH_SIZE
 
-try:
-    from aiq_api.auth.errors import AuthError as _AuthError
-except ImportError:
-    _AuthError = None  # type: ignore[assignment,misc]
-
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_RESEARCH_CONCURRENCY = 6
@@ -221,24 +216,7 @@ class DeepResearcherAgent:
             logger.info("=" * 80)
 
         try:
-            max_retries = 5
-            for attempt in range(max_retries):
-                try:
-                    result = await agent.ainvoke(
-                        state,
-                        config={"callbacks": self.callbacks} if self.callbacks else None,
-                    )
-                    last_error = None
-                except Exception as ex:
-                    logger.error("Deep Research attempt %d failed: %s", attempt + 1, ex, exc_info=True)
-                    last_error = ex
-                    # Auth errors must propagate immediately — retrying won't fix them.
-                    if _AuthError and isinstance(ex, _AuthError):
-                        raise ex
-                    # If we hit the recursion limit or asyncio error, we might want to stop
-                    if "recursion" in str(ex).lower() or "reuse already awaited" in str(ex):
-                        raise ex
-                    continue
+            result = await agent.ainvoke(state, config={"callbacks": self.callbacks} if self.callbacks else None)
 
             final_message = self._extract_final_markdown(result)
             if final_message is None:
@@ -280,7 +258,6 @@ class DeepResearcherAgent:
                 )
                 raise EmptySourceRegistryError(
                     "deep research",
-                    had_model_response=bool(final_message and final_message.strip()),
                     unavailable_tools=unavailable,
                     available_count=available_count,
                 )

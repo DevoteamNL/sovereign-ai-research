@@ -21,11 +21,9 @@ raw JWT payload decoding.
 
 Token sources checked in priority order by ``get_auth_token()``:
 
-1. **Registered token fetchers** — extension hook (see ``register_token_fetcher``)
-   tried highest-priority first.
-2. **NAT/AIQ Context cookies** — ``idToken`` cookie set by the frontend auth layer
+1. **NAT/AIQ Context cookies** — ``idToken`` cookie set by the frontend auth layer
    (server / web-UI mode).
-3. **NAT/AIQ Context Authorization header** — ``Authorization: Bearer <jwt>`` sent
+2. **NAT/AIQ Context Authorization header** — ``Authorization: Bearer <jwt>`` sent
    by API callers who authenticate with a JWT directly.
 """
 

@@ -436,7 +436,7 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
     ) -> JobStatusResponse:
         """Submit a new async job for deep research or other registered agents."""
         try:
-            get_agent_config(req.agent_type)
+            agent_config = get_agent_config(req.agent_type)
         except KeyError as e:
             raise HTTPException(400, str(e))
 

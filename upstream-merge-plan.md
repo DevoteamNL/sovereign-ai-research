@@ -11,12 +11,14 @@
 |---|---|
 | News data source | **Drop** RH `serper_news_search`; **adopt** upstream `duckduckgo_news_search` |
 | Paper search | **Drop** RH Serper-backed `google_scholar_paper_search` mods; **adopt** upstream `google_scholar_paper_search` |
-| Serper overall | **Remove entirely** — no Serper dependency remains anywhere in the project |
+| Serper overall | RH `serper_news_search` removed. **NOTE:** upstream's `paper_search` is itself Serper-backed (`SERPER_API_KEY`, serper.dev) — that is NVIDIA's backend, so Serper *stays* for paper search. "Adopt NVIDIA" wins over "remove Serper" here. |
 | Data-source architecture | **Adopt** upstream `data_source_registry.py` + `data_sources.py` wholesale |
 | End state | Land result **on `red-hat-v2.1.0` in place**. `develop` stays a pristine upstream mirror. |
 | Merge vs rebase | **Merge** (branch is public + tagged `v2.1.0-redhat`; never rebase shared history) |
 
-All data-source decisions now resolved — we take the NVIDIA implementations across the board and drop Serper completely.
+Data-source resolution: take NVIDIA implementations across the board. `serper_news_search` dropped → `duckduckgo_news_search`.
+`google_scholar_paper_search` reset to pure upstream (which uses Serper as its backend). `SERPER_API_KEY` env wiring is therefore
+RETAINED for paper_search; only the RH news-search Serper usage is removed.
 
 ## 1. Baseline facts (verified)
 
@@ -76,7 +78,7 @@ committing checkpoints and running the matching tests before moving on.
 3. **Adopt upstream `google_scholar_paper_search`** — discard RH's Serper-backed modifications to it; take upstream's version wholesale (resolves the former open item).
 4. **Add** upstream `duckduckgo_news_search` to the registry + UI data-source toggles + configs where serper-news was wired.
 5. Also inherit `exa_web_search`, `polymarket_prediction_market` (decide whether to expose in UI/configs or leave dormant).
-6. **Verify zero Serper residue:** `git grep -i serper` returns nothing (incl. `pyproject`/`uv.lock` dependency, env vars, docs).
+6. **Verify news-search Serper residue is gone:** `git grep -i serper` should return ONLY upstream's `paper_search`/google_scholar references (Serper is its backend) — no `serper_news_search` / RH news-search references.
 7. Reconcile `frontends/aiq_api/src/aiq_api/registry.py` + `test_data_sources*` / `test_data_source_registry`.
 - **Gate:** `pytest tests/aiq_agent/common/test_data_source*` + source-package tests; `/v1/data_sources` endpoint test.
 
@@ -107,7 +109,7 @@ committing checkpoints and running the matching tests before moving on.
 ## 5. Risks / watch-items
 - **137-file merge is large** — staged gates above are the mitigation; consider splitting C/E into sub-PRs if conflicts are deep.
 - **`data_sources.py` rewrite** — RH registration semantics may differ from upstream's new registry; re-wire, don't patch.
-- **Serper removal breadth** — touches ~45 files incl. docs/notebooks + the Serper dependency in `pyproject.toml`/`uv.lock` and `SERPER_API_KEY` env wiring; easy to miss a reference. `git grep -i serper` must come back clean.
+- **Serper news-search removal breadth** — RH `serper_news_search` references span ~45 files (configs, docs, notebooks, deploy). Remove news-search wiring only; KEEP `SERPER_API_KEY` + paper_search Serper usage (upstream's backend). Distinguish the two when grepping.
 - **NAT 1.6.0→1.7.0** — possible API changes in `builder.get_llm()` / LLM client creation affecting vLLM `openai` path.
 - **Branding regressions** — upstream UI refactors may move the components that carry logo/app-name; re-assert tokens after merge.
 

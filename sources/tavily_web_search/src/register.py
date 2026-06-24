@@ -151,11 +151,8 @@ async def tavily_web_search(tool_config: TavilyWebSearchToolConfig, builder: Bui
                 return combined if combined else "Search returned no results"
 
             except Exception as e:
-                if attempt < tool_config.max_retries - 1:
-                    logger.warning("Tavily search attempt %d/%d failed: %s", attempt + 1, tool_config.max_retries, e)
-                else:
-                    logger.error("Tavily search failed after %d attempts: %s", tool_config.max_retries, e)
-                    # Return a user-friendly error message
+                if attempt == tool_config.max_retries - 1:
+                    # On final attempt, return a user-friendly error message
                     error_msg = str(e)
                     if isinstance(e, ValueError):
                         return error_msg
