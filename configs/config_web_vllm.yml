@@ -79,6 +79,33 @@ llms:
     max_tokens: 100
 
 functions:
+  # =========================================================================
+  # Data Source Registry — controls UI source toggles, per-message filtering,
+  # and agent tool auto-inheritance. Agents with no explicit `tools` list
+  # inherit every tool listed here; use `exclude_tools` to specialize.
+  # See docs/source/customization/tools-and-sources.md.
+  # =========================================================================
+  data_sources:
+    _type: data_source_registry
+    sources:
+      - id: web_search
+        name: "Web Search"
+        description: "Search the web for real-time information."
+        tools:
+          - web_search_tool
+          - advanced_web_search_tool
+      - id: knowledge_layer
+        name: "Knowledge Base"
+        description: "Search uploaded documents and files."
+        tools:
+          - knowledge_search
+      # Uncomment when paper_search_tool is enabled (requires SERPER_API_KEY)
+      # - id: paper_search
+      #   name: "Academic Papers"
+      #   description: "Search academic papers and scientific publications."
+      #   tools:
+      #     - paper_search_tool
+
   web_search_tool:
     _type: tavily_web_search
     max_results: 5
@@ -88,16 +115,6 @@ functions:
     _type: tavily_web_search
     max_results: 2
     advanced_search: true
-
-  paper_search_tool:
-    _type: paper_search
-    max_results: 5
-    serper_api_key: ${SERPER_API_KEY}
-
-  news_search_tool:
-    _type: duckduckgo_news_search
-    max_results: 5
-    serper_api_key: ${SERPER_API_KEY}
 
   # Knowledge Retrieval (see sources/knowledge_layer/KNOWLEDGE-LAYER-SETUP.md)
   knowledge_search:
@@ -110,25 +127,27 @@ functions:
     top_k: 5
     chroma_dir: ${AIQ_CHROMA_DIR:-/tmp/chroma_data}
 
+  # Paper Search (optional - requires SERPER_API_KEY)
+  # Uncomment this block AND the paper_search entry in the registry above to enable.
+  # paper_search_tool:
+  #   _type: paper_search
+  #   max_results: 5
+  #   serper_api_key: ${SERPER_API_KEY}
+
+  # =========================================================================
+  # Agents — omit `tools` to inherit all sources from data_source_registry
+  # =========================================================================
   intent_classifier:
     _type: intent_classifier
     llm: intent_llm
+    # tools: omitted -> inherits all from data_source_registry
     verbose: true
-    tools:
-      - web_search_tool
-      - paper_search_tool
-      - news_search_tool
-      - knowledge_search
 
   clarifier_agent:
     _type: clarifier_agent
     llm: researcher_llm
     planner_llm: researcher_llm
-    tools:
-      - web_search_tool
-      - paper_search_tool
-      - news_search_tool
-      - knowledge_search
+    # tools: omitted -> inherits all from data_source_registry
     max_turns: 3
     enable_plan_approval: true
     log_response_max_chars: 2000
@@ -137,12 +156,10 @@ functions:
   shallow_research_agent:
     _type: shallow_research_agent
     llm: researcher_llm
+    # tools: omitted -> inherits all from data_source_registry
+    exclude_tools:                     # Remove advanced variant; shallow uses web_search_tool
+      - advanced_web_search_tool
     verbose: true
-    tools:
-      - web_search_tool
-      - paper_search_tool
-      - news_search_tool
-      - knowledge_search
     max_llm_turns: 10
     max_tool_iterations: 5
 
@@ -151,13 +168,11 @@ functions:
     orchestrator_llm: orchestrator_llm
     researcher_llm: researcher_llm
     planner_llm: orchestrator_llm
+    # tools: omitted -> inherits all from data_source_registry
+    exclude_tools:                     # Remove basic variant; deep uses advanced_web_search_tool
+      - web_search_tool
     max_loops: 2
     verbose: true
-    tools:
-      - paper_search_tool
-      - news_search_tool
-      - advanced_web_search_tool
-      - knowledge_search
 
 workflow:
   _type: chat_deepresearcher_agent
