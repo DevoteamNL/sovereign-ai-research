@@ -299,7 +299,7 @@ export const streamGenerate = async (
   const { onThinking, onStatus, onPrompt, onReport, onComplete, onError } = callbacks
 
   const requestBody = {
-    query: inputMessage,
+    input_message: inputMessage,
     session_id: sessionId,
     stream: true,
   }

@@ -42,8 +42,6 @@ from nat.data_models.api_server import WebSocketMessageType
 from nat.data_models.api_server import WebSocketUserInteractionResponseMessage
 from nat.data_models.api_server import WebSocketUserMessage
 from nat.data_models.api_server import WorkflowSchemaType
-from nat.data_models.interactive import HumanPromptText
-from nat.front_ends.fastapi.message_handler import UserInteraction
 
 
 class DummySocket:
@@ -97,10 +95,15 @@ class DummyStepAdaptor:
 
 
 class DummyWorker:
-    """Minimal FastApiFrontEndPluginWorker stub (NAT 1.6 added worker as a
-    required positional arg on WebSocketMessageHandler.__init__)."""
+    """Minimal FastApiFrontEndPluginWorker stand-in (NAT handler requires worker)."""
 
-    def set_conversation_handler(self, _conversation_id, _handler) -> None:
+    def set_conversation_handler(self, _conversation_id: str, _handler: object) -> None:
+        return None
+
+    def get_conversation_handler(self, _conversation_id: str) -> object | None:
+        return None
+
+    def remove_conversation_handler(self, _conversation_id: str) -> None:
         return None
 
 
@@ -456,11 +459,7 @@ async def test_handler_run_resolves_pending_future(monkeypatch) -> None:
     )
 
     future: asyncio.Future[TextContent] = asyncio.get_running_loop().create_future()
-    handler._user_interaction = UserInteraction(
-        future=future,
-        prompt_content=HumanPromptText(text="prompt", placeholder="", required=True),
-        started_at=0.0,
-    )
+    handler._user_interaction_response = future
 
     async def fake_validate_message(_message):
         return response_message

@@ -136,6 +136,8 @@ async def submit_agent_job(
         expiry_seconds: Job expiry time in seconds (default 24h).
         available_documents: Optional list of document dicts with file_name and summary.
         data_sources: Optional list of allowed data sources to enforce in the worker.
+        auth_token: Optional auth token to propagate to the Dask worker for
+            data sources that require authentication.
 
     Returns:
         The job ID.

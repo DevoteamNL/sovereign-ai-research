@@ -29,6 +29,7 @@ from .utils import get_current_user_info
 from .utils import get_user_info_from_unverified_token
 from .utils import get_verified_current_user
 from .utils import register_token_fetcher
+from .utils import unregister_token_fetcher
 
 __all__ = [
     "Principal",
@@ -41,4 +42,5 @@ __all__ = [
     "get_user_info_from_unverified_token",
     "get_verified_current_user",
     "register_token_fetcher",
+    "unregister_token_fetcher",
 ]

@@ -48,12 +48,30 @@ vi.mock('@/features/chat', () => ({
 const mockOpenRightPanel = vi.fn()
 const mockSetDataSourcePanelTab = vi.fn()
 
+const mockCloseRightPanel = vi.fn()
+const mockSetDataSourcesPanelTab = vi.fn()
+
+const mockLayoutState = () => ({
+  openRightPanel: mockOpenRightPanel,
+  closeRightPanel: mockCloseRightPanel,
+  setDataSourcesPanelTab: mockSetDataSourcesPanelTab,
+  setDataSourcePanelTab: mockSetDataSourcePanelTab,
+  enabledDataSourceIds: ['source-1', 'source-2'],
+  knowledgeLayerAvailable: true,
+  availableDataSources: [{ id: 'source-1' }, { id: 'source-2' }],
+  rightPanel: null as string | null,
+})
+
+type MockLayoutState = ReturnType<typeof mockLayoutState>
+
 vi.mock('../store', () => ({
-  useLayoutStore: vi.fn(() => ({
-    openRightPanel: mockOpenRightPanel,
-    setDataSourcePanelTab: mockSetDataSourcePanelTab,
-    enabledDataSourceIds: ['source-1', 'source-2'],
-  })),
+  useLayoutStore: Object.assign(
+    vi.fn((selector?: (s: MockLayoutState) => unknown) => {
+      const state = mockLayoutState()
+      return selector ? selector(state) : state
+    }),
+    { getState: () => mockLayoutState() }
+  ),
 }))
 
 // Mock useAppConfig
@@ -133,7 +151,9 @@ describe('InputArea', () => {
   test('renders text area with default placeholder', () => {
     render(<InputArea isAuthenticated={true} />)
 
-    expect(screen.getByPlaceholderText('Check data sources and ask a research question...')).toBeInTheDocument()
+    expect(
+      screen.getByPlaceholderText('Check data sources and ask a research question...')
+    ).toBeInTheDocument()
   })
 
   test('renders with custom placeholder', () => {
@@ -158,6 +178,19 @@ describe('InputArea', () => {
     render(<InputArea isAuthenticated={true} />)
 
     expect(screen.getByRole('button', { name: /send message/i })).toBeDisabled()
+  })
+
+  test('tabs from the prompt input directly to the send button', async () => {
+    const user = userEvent.setup()
+    render(<InputArea isAuthenticated={true} />)
+
+    const input = screen.getByRole('textbox')
+    await user.tab()
+    expect(input).toHaveFocus()
+
+    await user.type(input, 'Hello')
+    await user.tab()
+    expect(screen.getByRole('button', { name: /send message/i })).toHaveFocus()
   })
 
   test('enables send button when message is typed', async () => {
@@ -447,6 +480,27 @@ describe('InputArea', () => {
     expect(screen.getByPlaceholderText('Type your response to the agent...')).toBeInTheDocument()
     // Send button should be the normal send button, not a research-in-progress popover
     expect(screen.getByRole('button', { name: /send response/i })).toBeInTheDocument()
+  })
+
+  test('does not assign positive tab indexes in response mode', () => {
+    vi.mocked(useIsCurrentSessionBusy).mockReturnValue(true)
+    vi.mocked(useWebSocketChat).mockReturnValue({
+      sendMessage: mockSendMessage,
+      isStreaming: false,
+      isLoading: false,
+      respondToInteraction: mockRespondToInteraction,
+      pendingInteraction: {
+        id: 'prompt-1',
+        parentId: 'agent-1',
+        inputType: 'approval',
+        text: 'Approve plan?',
+      },
+    } as unknown as ReturnType<typeof useWebSocketChat>)
+
+    render(<InputArea isAuthenticated={true} connectionMode="websocket" />)
+
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('tabindex')
+    expect(screen.getByRole('button', { name: /send response/i })).not.toHaveAttribute('tabindex')
   })
 
   test('input enabled during HITL even when deep research is in progress', async () => {

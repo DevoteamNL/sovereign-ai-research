@@ -32,8 +32,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from typing import TYPE_CHECKING
+from typing import Annotated
 
+from fastapi import Body
 from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
@@ -41,6 +44,12 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 
+from aiq_agent.common.data_source_registry import get_all_sources
+from aiq_agent.common.data_source_registry import get_all_tool_refs
+from aiq_agent.common.data_source_registry import get_source_id_for_tool
+from nat.builder.framework_enum import LLMFrameworkEnum
+
+from ..jobs.access import require_verified_principal
 from ..registry import AGENT_REGISTRY
 from ..registry import get_agent_config
 
@@ -53,19 +62,6 @@ logger = logging.getLogger(__name__)
 
 class JobSubmitRequest(BaseModel):
     """Request to submit an async job."""
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "agent_type": "deep_researcher",
-                    "input": "What are the latest advances in quantum computing?",
-                    "job_id": None,
-                    "expiry_seconds": 86400,
-                }
-            ]
-        }
-    )
 
     agent_type: str = Field(..., description="Agent type (e.g., 'deep_researcher')")
     input: str = Field(..., min_length=1, description="Input query for the agent")
@@ -81,6 +77,159 @@ class JobSubmitRequest(BaseModel):
         le=604800,
         description="Job expiry in seconds (default from config, max 7 days)",
     )
+    data_sources: list[str] | None = Field(
+        None,
+        description=(
+            "Optional data source IDs to target. Omit or set null to use all data-source tools "
+            "available to the chosen agent. When specific IDs are passed, unmapped utility tools "
+            "(e.g., 'think') remain available. Pass an empty list to run the agent with no "
+            "data-source tools; unmapped utility tools remain available."
+        ),
+    )
+
+
+JOB_SUBMIT_EXAMPLES: dict[str, dict] = {
+    "default": {
+        "summary": "Default (all data sources)",
+        "value": {
+            "agent_type": "deep_researcher",
+            "input": "What are the latest advances in quantum computing?",
+            "expiry_seconds": 86400,
+        },
+    },
+    "scoped": {
+        "summary": "Scoped to specific data sources",
+        "value": {
+            "agent_type": "deep_researcher",
+            "input": "What are the latest advances in quantum computing?",
+            "data_sources": ["web_search"],
+        },
+    },
+}
+
+
+def _source_ids_by_lowercase() -> tuple[list[str], dict[str, str]]:
+    """Return known source IDs and a lower-case lookup preserving canonical IDs.
+
+    Assumes registry IDs are unique under ``.lower()``. The data source registry
+    convention is snake_case (e.g. ``web_search``, ``knowledge_layer``); two IDs
+    differing only by case would collapse here.
+    """
+    known_ids = sorted(source.id for source in get_all_sources())
+    return known_ids, {source_id.lower(): source_id for source_id in known_ids}
+
+
+async def _get_agent_available_source_ids(builder: WorkflowBuilder, agent_config_name: str) -> list[str]:
+    """Return mapped source IDs with at least one effective tool for an agent config.
+
+    This mirrors the async job runner's effective tool resolution: explicit
+    `tools` wins and overrides registry refs, otherwise inherit all registry
+    refs, resolve LangChain wrappers through the builder, then apply exact
+    tool-name `exclude_tools`.
+
+    A source is reported as available if at least one of its tools survives
+    ``exclude_tools``; partial exclusion does not hide the source.
+
+    Assumes agent configs registered for async submission expose typed
+    ``tools`` and ``exclude_tools`` fields (see ``aiq_agent.agents.*.register``).
+    A registered agent without these fields is a registration-time bug, not a
+    runtime concern.
+    """
+    fn_config = builder.get_function_config(agent_config_name)
+    tool_refs = fn_config.tools if fn_config.tools is not None else get_all_tool_refs()
+    tools = await builder.get_tools(tool_names=tool_refs, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
+
+    excluded = set(fn_config.exclude_tools or [])
+    if excluded:
+        tools = [tool for tool in tools if getattr(tool, "name", "") not in excluded]
+
+    source_ids: set[str] = set()
+    for tool in tools:
+        name = getattr(tool, "name", "")
+        if not name:
+            continue
+        sid = get_source_id_for_tool(name)
+        if sid is not None:
+            source_ids.add(sid)
+    return sorted(source_ids)
+
+
+async def _validate_data_sources_for_agent(
+    *,
+    builder: WorkflowBuilder,
+    agent_type: str,
+    agent_config_name: str,
+    data_sources: list[str] | None,
+) -> None:
+    """Raise HTTP 422 if requested sources are unknown or unavailable to the selected agent."""
+    # Semantic fast path: omit/null/empty means "use all data-source tools available
+    # to the chosen agent" (or, for empty list, "use no data-source tools"). In both
+    # cases there is nothing for the caller to validate against, so we skip.
+    #
+    # Bonus: this also avoids a builder.get_tools() round-trip on the default code
+    # path -- pinned by test_submit_job_forwards_omitted_data_sources_without_resolving_tools.
+    if not data_sources:
+        return
+
+    known_ids, known_by_lower = _source_ids_by_lowercase()
+
+    try:
+        available_ids = await _get_agent_available_source_ids(builder, agent_config_name)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.exception(
+            "Failed to validate data sources for agent %s using config %s",
+            agent_type,
+            agent_config_name,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to validate data sources for selected agent",
+        ) from exc
+
+    available_by_lower = {source_id.lower(): source_id for source_id in available_ids}
+
+    # Single-pass partition: walk requested IDs once, deduping case-insensitively
+    # and routing each unique ID into either "unknown to system" or "known but
+    # unavailable to this agent." Preserves first-seen casing and request order.
+    seen: set[str] = set()
+    invalid_ids: list[str] = []
+    unavailable_for_agent: list[str] = []
+    for source_id in data_sources:
+        key = source_id.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        if key not in known_by_lower:
+            invalid_ids.append(source_id)
+        elif key not in available_by_lower:
+            unavailable_for_agent.append(source_id)
+
+    if not invalid_ids and not unavailable_for_agent:
+        return
+
+    parts: list[str] = []
+    if invalid_ids:
+        parts.append(f"Unknown data source(s): {', '.join(invalid_ids)}")
+    if unavailable_for_agent:
+        parts.append(f"Data source(s) are not available for agent '{agent_type}': {', '.join(unavailable_for_agent)}")
+    message = ". ".join(parts)
+
+    # Echo back the caller's request annotated with which IDs were unknown vs
+    # unavailable, plus the global registry list (which is also discoverable via
+    # /v1/data_sources). The per-agent capability list is intentionally NOT
+    # returned -- it's not exposed anywhere else and would reveal agent
+    # capability boundaries.
+    raise HTTPException(
+        status_code=422,
+        detail={
+            "message": message,
+            "invalid_ids": invalid_ids,
+            "unavailable_for_agent": unavailable_for_agent,
+            "known_ids": known_ids,
+        },
+    )
 
 
 class JobStatusResponse(BaseModel):
@@ -91,7 +240,7 @@ class JobStatusResponse(BaseModel):
             "examples": [
                 {
                     "job_id": "abc123",
-                    "status": "SUBMITTED",
+                    "status": "submitted",
                     "agent_type": "deep_researcher",
                     "error": None,
                     "created_at": "2026-02-12T10:30:00Z",
@@ -101,7 +250,10 @@ class JobStatusResponse(BaseModel):
     )
 
     job_id: str = Field(..., description="Unique job identifier")
-    status: str = Field(..., description="Current status (SUBMITTED, RUNNING, COMPLETED, FAILED, CANCELLED)")
+    status: str = Field(
+        ...,
+        description="Current status: submitted, running, success, failure, interrupted, not_found",
+    )
     agent_type: str | None = Field(None, description="Agent type used for this job")
     error: str | None = Field(None, description="Error message if job failed")
     created_at: str | None = Field(None, description="Creation timestamp (ISO format)")
@@ -143,23 +295,7 @@ class DataSource(BaseModel):
     id: str = Field(..., description="Unique identifier for the data source")
     name: str = Field(..., description="Display name")
     description: str | None = Field(default=None, description="Human-readable description")
-
-
-def _collect_tool_names(builder: WorkflowBuilder) -> set[str]:
-    """Collect tool names from workflow functions that declare tools (for data source list)."""
-    tool_names: set[str] = set()
-    # intent_classifier (orchestration) and research agents may have tools; meta_chatter/depth_router no longer exist
-    for fn_name in ("deep_research_agent", "shallow_research_agent", "intent_classifier"):
-        try:
-            fn_config = builder.get_function_config(fn_name)
-        except (KeyError, ValueError):
-            continue
-        tools = getattr(fn_config, "tools", None)
-        if not tools:
-            continue
-        for tool in tools:
-            tool_names.add(getattr(tool, "name", str(tool)))
-    return tool_names
+    requires_auth: bool = Field(default=False, description="Whether user authentication is required")
 
 
 async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: FastApiFrontEndPluginWorker) -> None:
@@ -172,13 +308,20 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
     import logging as std_logging
     import os
 
+    from aiq_agent.common.data_source_registry import get_all_sources
     from nat.front_ends.fastapi.async_jobs.job_store import JobStatus
 
     from ..jobs.access import authorize_job_access
     from ..jobs.access import ensure_job_access_table
-    from ..jobs.access import require_verified_principal
     from ..jobs.event_store import EventStore
     from ..jobs.submit import submit_agent_job as submit_authorized_job
+
+    if not get_all_sources():
+        logger.warning(
+            "No data sources registered. Add a 'data_sources' function with "
+            "_type: data_source_registry to your YAML config to enable "
+            "data source toggles in the UI."
+        )
 
     @app.get(
         "/v1/jobs/async/agents",
@@ -202,48 +345,16 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
         summary="List data sources",
     )
     async def list_data_sources() -> list[DataSource]:
-        """List available data sources with metadata."""
-        data_sources = [
+        """List available data sources dynamically from the registry."""
+        return [
             DataSource(
-                id="web_search",
-                name="Web Search",
-                description="Search the web for real-time information.",
+                id=source.id,
+                name=source.name,
+                description=source.description,
+                requires_auth=source.requires_auth,
             )
+            for source in get_all_sources()
         ]
-
-        tool_names = _collect_tool_names(builder)
-
-        paper_configured = any("paper" in name.lower() or "scholar" in name.lower() for name in tool_names)
-        if paper_configured:
-            data_sources.append(
-                DataSource(
-                    id="paper_search",
-                    name="Paper Search",
-                    description="Search academic papers and scholarly publications.",
-                )
-            )
-
-        news_configured = any("news" in name.lower() for name in tool_names)
-        if news_configured:
-            data_sources.append(
-                DataSource(
-                    id="news_search",
-                    name="News Search",
-                    description="Search current news articles and breaking stories.",
-                )
-            )
-
-        knowledge_configured = any("knowledge" in name.lower() or name == "knowledge_search" for name in tool_names)
-        if knowledge_configured:
-            data_sources.append(
-                DataSource(
-                    id="knowledge_layer",
-                    name="Knowledge Base",
-                    description="Search uploaded documents and files.",
-                )
-            )
-
-        return data_sources
 
     logger.info("Registered /v1/data_sources and /v1/jobs/async/agents routes")
 
@@ -316,18 +427,36 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
         ),
         responses={
             400: {"description": "Unknown agent type or invalid request"},
+            422: {"description": "One or more unknown or agent-unavailable data source IDs"},
             503: {"description": "Dask scheduler not available"},
         },
     )
-    async def submit_job(req: JobSubmitRequest) -> JobStatusResponse:
+    async def submit_job(
+        req: Annotated[JobSubmitRequest, Body(openapi_examples=JOB_SUBMIT_EXAMPLES)],
+    ) -> JobStatusResponse:
         """Submit a new async job for deep research or other registered agents."""
         try:
-            get_agent_config(req.agent_type)
+            agent_config = get_agent_config(req.agent_type)
         except KeyError as e:
             raise HTTPException(400, str(e))
 
         expiry = req.expiry_seconds if req.expiry_seconds is not None else default_expiry_seconds
+        # Authenticate the caller (raises 401/403 if unverified). The returned principal
+        # is also forwarded to submit_authorized_job(...) below for ownership recording.
         principal = require_verified_principal()
+        validation_start = time.perf_counter()
+        await _validate_data_sources_for_agent(
+            builder=builder,
+            agent_type=req.agent_type,
+            agent_config_name=agent_config.config_name,
+            data_sources=req.data_sources,
+        )
+        logger.info(
+            "Validated data_sources for agent %s in %.1fms (requested=%s)",
+            req.agent_type,
+            (time.perf_counter() - validation_start) * 1000,
+            len(req.data_sources) if req.data_sources is not None else "none",
+        )
 
         # Propagate auth token to Dask worker for requires_auth data sources
         from aiq_agent.auth import get_auth_token
@@ -341,6 +470,7 @@ async def register_job_routes(app: FastAPI, builder: WorkflowBuilder, worker: Fa
                 principal=principal,
                 job_id=req.job_id,
                 expiry_seconds=expiry,
+                data_sources=req.data_sources,
                 auth_token=auth_token,
             )
         except RuntimeError as e:
@@ -1053,7 +1183,12 @@ async def _sse_generator_postgres(job_store, job_id: str, db_url: str, start_eve
             sequence_id += 1
         return f"id: {sequence_id}\nevent: {event_type}\ndata: {json.dumps(data)}\n\n"
 
-    asyncpg_url = db_url.replace("+psycopg2", "").replace("+asyncpg", "").replace("postgresql://", "postgres://")
+    # LISTEN/NOTIFY needs a persistent session — incompatible with PgBouncer
+    # transaction pooling. Use AIQ_LISTEN_DB_URL to point directly at PostgreSQL.
+    import os
+
+    listen_db_url = os.environ.get("AIQ_LISTEN_DB_URL", db_url)
+    asyncpg_url = listen_db_url.replace("+psycopg2", "").replace("+asyncpg", "").replace("postgresql://", "postgres://")
     channel = f"job_events_{job_id.replace('-', '_')}"
 
     logger.info(f"SSE pub-sub stream starting for job_id={job_id}, channel={channel}")
@@ -1139,7 +1274,14 @@ async def _sse_generator_postgres(job_store, job_id: str, db_url: str, start_eve
                                 event_type = event.pop("type", "event")
                                 yield format_sse(event_type, event, db_event_id)
                     except TimeoutError:
-                        pass
+                        # Fallback poll: catch events if NOTIFY was lost
+                        fallback_events = await EventStore.get_events_async(db_url, job_id, last_event_id, 100)
+                        for event in fallback_events:
+                            db_event_id = event.pop("_id", None)
+                            if db_event_id:
+                                last_event_id = db_event_id
+                            event_type = event.pop("type", "event")
+                            yield format_sse(event_type, event, db_event_id)
 
                     job = await job_store.get_job(job_id)
                     if not job:

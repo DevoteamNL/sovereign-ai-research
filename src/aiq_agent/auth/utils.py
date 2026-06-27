@@ -21,11 +21,9 @@ raw JWT payload decoding.
 
 Token sources checked in priority order by ``get_auth_token()``:
 
-1. **Registered token fetchers** — extension hook (see ``register_token_fetcher``)
-   tried highest-priority first.
-2. **NAT/AIQ Context cookies** — ``idToken`` cookie set by the frontend auth layer
+1. **NAT/AIQ Context cookies** — ``idToken`` cookie set by the frontend auth layer
    (server / web-UI mode).
-3. **NAT/AIQ Context Authorization header** — ``Authorization: Bearer <jwt>`` sent
+2. **NAT/AIQ Context Authorization header** — ``Authorization: Bearer <jwt>`` sent
    by API callers who authenticate with a JWT directly.
 """
 
@@ -63,6 +61,24 @@ def register_token_fetcher(fetcher: Callable[[], str | None], priority: int = 0)
         _token_fetchers.append((priority, fetcher))
         _token_fetchers.sort(key=lambda x: x[0], reverse=True)
     logger.debug("Registered token fetcher (priority=%d), total fetchers: %d", priority, len(_token_fetchers))
+
+
+def unregister_token_fetcher(fetcher: Callable[[], str | None]) -> None:
+    """Remove a previously registered token fetcher.
+
+    Matches by callable identity (``is`` check). No-op if the fetcher
+    is not currently registered.
+
+    Args:
+        fetcher: The same callable object that was passed to
+            :func:`register_token_fetcher`.
+    """
+    with _fetcher_lock:
+        before = len(_token_fetchers)
+        _token_fetchers[:] = [(p, f) for p, f in _token_fetchers if f is not fetcher]
+        removed = before - len(_token_fetchers)
+    if removed:
+        logger.debug("Unregistered token fetcher, total fetchers: %d", len(_token_fetchers))
 
 
 def clear_token_fetchers() -> None:

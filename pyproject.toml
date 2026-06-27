@@ -20,6 +20,9 @@ requires = ["setuptools >= 64", "setuptools-scm>=8"]
 [tool.setuptools]
 package-dir = {"" = "src"}
 
+[tool.setuptools.package-data]
+"aiq_agent.agents.deep_researcher" = ["skills/**/*"]
+
 [project]
 name = "aiq-agent"
 version = "2.0.0"
@@ -28,34 +31,30 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = {text = "Apache-2.0"}
 dependencies = [
-    "nvidia-nat==1.6.0",
-    "nvidia-nat-core==1.6.0",
-    "nvidia-nat-langchain==1.6.0",
-    "nvidia-nat[telemetry]==1.6.0",
-    "nvidia-nat-weave==1.6.0",
-    "nvidia-nat[async_endpoints]==1.6.0",
-    "nvidia-nat-phoenix==1.6.0",
-    "nvidia-nat-profiler==1.6.0",
-    "nvidia-nat-eval==1.6.0",
-    "deepagents>=0.3.0",
+    "nvidia-nat-core==1.7.0",
+    "nvidia-nat[langchain,async_endpoints,phoenix,mcp]==1.7.0",
+    "nvidia-nat-eval==1.7.0",
+    "nvidia-nat-profiler==1.7.0",
+    "deepagents>=0.6.5",
     "langgraph-checkpoint-postgres>=3.0.0",
     "langgraph-checkpoint-sqlite>=2.0.0",
+    "langchain-modal==0.0.5",
     "psycopg[binary]>=3.0.0",
     "asyncpg>=0.29.0",
     "aiosqlite>=0.19.0",
     "aiofiles>=23.0.0",
-    "python-multipart>=0.0.9",
+    "python-multipart>=0.0.27,<0.1",
     "knowledge-layer[all]",
     # Minimum version pins to address known vulnerabilities (transitive deps)
     "langchain-core>=1.2.22",   # CVE: path traversal in legacy load_prompt
     "langgraph>=1.0.10",        # CVE: unsafe msgpack deserialization in checkpoints
-    "pyasn1>=0.6.3",            # CVE: DoS via unbounded recursion
+    "pyasn1>=0.6.3,<0.7",       # CVE: DoS via unbounded recursion (upper bound from upstream)
     "cryptography>=46.0.6,<47", # CVE: incomplete DNS name constraint enforcement (upper bound from upstream #175)
     "pypdf>=6.9.2",             # Multiple DoS CVEs (infinite loops, memory exhaustion)
     # "requests>=2.33.0" — blocked by ragaai-catalyst pinning requests<2.33
     "pygments>=2.20.0,<3",      # CVE: ReDoS in GUID matching (upper bound from upstream #175)
     "pillow>=12.2.0,<13",       # CVE-2026-40192 (upstream #183)
-    "nltk>=3.9.4",              # CVE: XSS in NLTK
+    "nltk>=3.9.4,<4",           # CVE: XSS in NLTK (upper bound from upstream)
 ]
 
 [project.optional-dependencies]
@@ -96,9 +95,11 @@ aiq_shallow_researcher = "aiq_agent.agents.shallow_researcher.register"
 aiq_deep_researcher = "aiq_agent.agents.deep_researcher.register"
 aiq_fastapi_extensions = "aiq_agent.fastapi_extensions.register"
 aiq_clarifier = "aiq_agent.agents.clarifier.register"
+aiq_data_source_registry = "aiq_agent.common.data_source_registry"
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "sources/**/tests"]
+addopts = "--import-mode=importlib"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 
@@ -195,6 +196,9 @@ dev = [
     # Workspace packages for testing
     "google-scholar-paper-search",
     "tavily-web-search",
+    "exa-web-search",
+    "duckduckgo-news-search",
+    "polymarket-prediction-market",
     "knowledge-layer[all]",
     "aiq-api",
     "aiq-research-cli",
@@ -211,6 +215,12 @@ override-dependencies = [
     "pyopenssl>=26.0.0,<27",
     "pytest>=9.0.3",          # CVE floor (captures upstream #192)
     "tornado>=6.5.5",
+    "litellm>=1.83.7,<2",
+    "mako>=1.3.12,<2",
+    "banks>=2.4.2,<3",
+    "lxml>=6.1.0,<7",
+    "nltk>=3.9.4,<4",
+    "pyasn1>=0.6.3,<0.7",
 ]
 
 [tool.uv.pip]
@@ -230,6 +240,9 @@ members = [
 aiq-agent = { workspace = true }
 google-scholar-paper-search = { workspace = true }
 tavily-web-search = { workspace = true }
+exa-web-search = { workspace = true }
+duckduckgo-news-search = { workspace = true }
+polymarket-prediction-market = { workspace = true }
 knowledge-layer = { workspace = true }
 aiq-api = { workspace = true }
 aiq-research-cli = { workspace = true }

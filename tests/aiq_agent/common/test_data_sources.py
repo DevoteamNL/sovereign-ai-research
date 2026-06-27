@@ -20,11 +20,45 @@ from unittest.mock import MagicMock
 import pytest
 from langchain_core.messages import HumanMessage
 
+from aiq_agent.common.data_source_registry import populate_from_config
+from aiq_agent.common.data_source_registry import reset_registry
 from aiq_agent.common.data_sources import DEFAULT_DATA_SOURCES
 from aiq_agent.common.data_sources import extract_messages_and_sources
 from aiq_agent.common.data_sources import filter_tools_by_sources
 from aiq_agent.common.data_sources import format_data_source_tools
 from aiq_agent.common.data_sources import parse_data_sources
+
+
+@pytest.fixture(autouse=True)
+def _setup_registry():
+    """Set up registry with test data sources and tool→source map for all tests."""
+    reset_registry()
+
+    populate_from_config(
+        [
+            {
+                "id": "web_search",
+                "name": "Web Search",
+                "description": "Search the web for real-time information.",
+                "tools": ["web_search_tool", "web_search", "tavily_search"],
+            },
+            {
+                "id": "knowledge_layer",
+                "name": "Knowledge Base",
+                "description": "Search uploaded documents and files.",
+                "tools": ["knowledge_search", "knowledge_retrieval"],
+            },
+            {
+                "id": "paper_search",
+                "name": "Academic Papers",
+                "description": "Search academic papers.",
+                "tools": ["paper_search_tool"],
+            },
+        ]
+    )
+
+    yield
+    reset_registry()
 
 
 class TestParseDataSources:
@@ -106,14 +140,16 @@ class TestFilterToolsBySourcesBasic:
         result = filter_tools_by_sources(tools, None)
         assert result == tools
 
-    def test_filter_empty_sources_returns_empty(self):
-        """Test that empty data_sources excludes web and knowledge tools (only 'other' tools included)."""
+    def test_filter_empty_sources_keeps_unmapped_tools(self):
+        """Test that empty data_sources disables source tools but keeps unmapped tools."""
         web_tool = MagicMock()
         web_tool.name = "web_search_tool"
         knowledge_tool = MagicMock()
         knowledge_tool.name = "knowledge_search"
-        result = filter_tools_by_sources([web_tool, knowledge_tool], [])
-        assert result == []
+        calculator = MagicMock()
+        calculator.name = "calculator"
+        result = filter_tools_by_sources([web_tool, knowledge_tool, calculator], [])
+        assert result == [calculator]
 
 
 class TestFilterToolsBySourcesWebSearch:
@@ -194,7 +230,7 @@ class TestFilterToolsBySourcesMixed:
         assert other_tool in result
 
     def test_filter_all_three_source_types(self):
-        """Test filtering with web_search and knowledge_layer sources."""
+        """Test filtering with web_search, knowledge_layer, and ECI sources."""
         web_tool = MagicMock()
         web_tool.name = "tavily_search"
         knowledge_tool = MagicMock()
@@ -210,8 +246,8 @@ class TestFilterToolsBySourcesMixed:
         assert knowledge_tool in result
         assert other_tool in result
 
-    def test_filter_case_insensitive_sources(self):
-        """Test that source matching is case-insensitive."""
+    def test_filter_source_ids_are_case_insensitive(self):
+        """Test that source matching tolerates caller casing differences."""
         web_tool = MagicMock()
         web_tool.name = "web_search"
 
@@ -219,7 +255,7 @@ class TestFilterToolsBySourcesMixed:
         assert web_tool in result
 
     def test_filter_preserves_other_tools(self):
-        """Test that non-search tools are always included."""
+        """Test that non-search/ECI tools are always included."""
         calculator = MagicMock()
         calculator.name = "calculator"
         code_executor = MagicMock()
@@ -291,330 +327,48 @@ class TestFormatDataSourceTools:
     """Tests for format_data_source_tools function."""
 
     def test_format_web_search_source(self):
-        """Test formatting web_search data source."""
+        """Test formatting web_search data source uses registry display name."""
         result = format_data_source_tools(["web_search"])
 
         assert len(result) == 1
-        assert result[0]["name"] == "web_search"
+        assert result[0]["name"] == "Web Search"
         assert "web" in result[0]["description"].lower()
 
     def test_format_knowledge_layer_source(self):
-        """Test formatting knowledge_layer data source."""
+        """Test formatting knowledge_layer data source uses registry display name."""
         result = format_data_source_tools(["knowledge_layer"])
 
         assert len(result) == 1
-        assert result[0]["name"] == "knowledge_search"
+        assert result[0]["name"] == "Knowledge Base"
         assert "document" in result[0]["description"].lower() or "file" in result[0]["description"].lower()
 
-    def test_format_non_web_source_as_knowledge(self):
-        """Test that non-web sources (e.g. confluence) map to knowledge_search."""
+    def test_format_unknown_source_uses_title_case(self):
+        """Test that unregistered sources fall back to title-cased ID."""
         result = format_data_source_tools(["confluence"])
 
         assert len(result) == 1
-        assert result[0]["name"] == "knowledge_search"
-        assert "document" in result[0]["description"].lower() or "file" in result[0]["description"].lower()
+        assert result[0]["name"] == "Confluence"
 
     def test_format_multiple_sources(self):
-        """Test formatting multiple data sources (web_search and others map to knowledge_search)."""
-        result = format_data_source_tools(["web_search", "sharepoint"])
+        """Test formatting multiple data sources."""
+        result = format_data_source_tools(["web_search", "knowledge_layer"])
 
         assert len(result) == 2
         names = [r["name"] for r in result]
-        assert "web_search" in names
-        assert "knowledge_search" in names
-
-    def test_format_multiple_sources_with_knowledge_layer(self):
-        """Test formatting multiple data sources; non-web sources map to knowledge_search."""
-        result = format_data_source_tools(["web_search", "knowledge_layer", "confluence"])
-
-        assert len(result) == 3
-        names = [r["name"] for r in result]
-        assert "web_search" in names
-        assert names.count("knowledge_search") == 2
+        assert "Web Search" in names
+        assert "Knowledge Base" in names
 
     def test_format_empty_list(self):
         """Test formatting empty list returns empty list."""
         result = format_data_source_tools([])
         assert len(result) == 0
 
-    def test_format_non_web_tool_as_knowledge(self):
-        """Test that non-web sources (e.g. google_drive) map to knowledge_search."""
+    def test_format_underscore_replacement_for_unknown(self):
+        """Test that unregistered sources with underscores get title-cased."""
         result = format_data_source_tools(["google_drive"])
 
         assert len(result) == 1
-        assert result[0]["name"] == "knowledge_search"
-
-
-class TestFilterToolsBySourcesPaperSearch:
-    """Tests for filtering paper search tools."""
-
-    def test_filter_paper_search_includes_paper_tools(self):
-        """Test that paper_search includes tools with 'paper' in name."""
-        paper_tool = MagicMock()
-        paper_tool.name = "paper_search_tool"
-        web_tool = MagicMock()
-        web_tool.name = "web_search"
-
-        result = filter_tools_by_sources([paper_tool, web_tool], ["paper_search"])
-        assert paper_tool in result
-        assert web_tool not in result
-
-    def test_filter_paper_search_includes_scholar_tools(self):
-        """Test that paper_search includes tools with 'scholar' in name."""
-        scholar_tool = MagicMock()
-        scholar_tool.name = "google_scholar"
-        web_tool = MagicMock()
-        web_tool.name = "tavily_search"
-
-        result = filter_tools_by_sources([scholar_tool, web_tool], ["paper_search"])
-        assert scholar_tool in result
-        assert web_tool not in result
-
-    def test_filter_paper_search_excludes_knowledge_tools(self):
-        """Test that paper_search excludes knowledge tools."""
-        paper_tool = MagicMock()
-        paper_tool.name = "paper_retrieval"
-        knowledge_tool = MagicMock()
-        knowledge_tool.name = "knowledge_search"
-
-        result = filter_tools_by_sources([paper_tool, knowledge_tool], ["paper_search"])
-        assert paper_tool in result
-        assert knowledge_tool not in result
-
-    def test_filter_paper_search_preserves_unmatched_tools(self):
-        """Test that paper_search preserves unmatched (other) tools."""
-        paper_tool = MagicMock()
-        paper_tool.name = "scholar_lookup"
-        calculator = MagicMock()
-        calculator.name = "calculator"
-
-        result = filter_tools_by_sources([paper_tool, calculator], ["paper_search"])
-        assert paper_tool in result
-        assert calculator in result
-
-
-class TestFilterToolsBySourcesNewsSearch:
-    """Tests for filtering news search tools."""
-
-    def test_filter_news_search_includes_news_tools(self):
-        """Test that news_search includes tools with 'news' in name."""
-        news_tool = MagicMock()
-        news_tool.name = "news_aggregator"
-        web_tool = MagicMock()
-        web_tool.name = "web_search"
-
-        result = filter_tools_by_sources([news_tool, web_tool], ["news_search"])
-        assert news_tool in result
-        assert web_tool not in result
-
-    def test_filter_news_search_excludes_web_tools(self):
-        """Test that news_search excludes web tools."""
-        news_tool = MagicMock()
-        news_tool.name = "news_search_tool"
-        tavily_tool = MagicMock()
-        tavily_tool.name = "tavily_search"
-
-        result = filter_tools_by_sources([news_tool, tavily_tool], ["news_search"])
-        assert news_tool in result
-        assert tavily_tool not in result
-
-    def test_filter_news_search_excludes_knowledge_tools(self):
-        """Test that news_search excludes knowledge tools."""
-        news_tool = MagicMock()
-        news_tool.name = "breaking_news"
-        knowledge_tool = MagicMock()
-        knowledge_tool.name = "knowledge_search"
-
-        result = filter_tools_by_sources([news_tool, knowledge_tool], ["news_search"])
-        assert news_tool in result
-        assert knowledge_tool not in result
-
-    def test_filter_news_search_excludes_paper_tools(self):
-        """Test that news_search excludes paper tools."""
-        news_tool = MagicMock()
-        news_tool.name = "news_feed"
-        paper_tool = MagicMock()
-        paper_tool.name = "paper_search"
-
-        result = filter_tools_by_sources([news_tool, paper_tool], ["news_search"])
-        assert news_tool in result
-        assert paper_tool not in result
-
-    def test_filter_news_search_preserves_unmatched_tools(self):
-        """Test that news_search preserves unmatched (other) tools."""
-        news_tool = MagicMock()
-        news_tool.name = "news_search"
-        calculator = MagicMock()
-        calculator.name = "calculator"
-
-        result = filter_tools_by_sources([news_tool, calculator], ["news_search"])
-        assert news_tool in result
-        assert calculator in result
-
-
-class TestFilterToolsBySourcesAllSources:
-    """Tests for filtering with all sources enabled."""
-
-    def test_all_sources_include_all_tools(self):
-        """Test that enabling all sources includes all categorized tools."""
-        web_tool = MagicMock()
-        web_tool.name = "tavily_search"
-        paper_tool = MagicMock()
-        paper_tool.name = "paper_search"
-        news_tool = MagicMock()
-        news_tool.name = "news_aggregator"
-        knowledge_tool = MagicMock()
-        knowledge_tool.name = "knowledge_search"
-        other_tool = MagicMock()
-        other_tool.name = "calculator"
-
-        all_tools = [web_tool, paper_tool, news_tool, knowledge_tool, other_tool]
-        result = filter_tools_by_sources(
-            all_tools,
-            ["web_search", "paper_search", "news_search", "knowledge_layer"],
-        )
-
-        assert web_tool in result
-        assert paper_tool in result
-        assert news_tool in result
-        assert knowledge_tool in result
-        assert other_tool in result
-        assert len(result) == 5
-
-    def test_all_sources_include_scholar_tools(self):
-        """Test that all sources include scholar tools via paper_search."""
-        scholar_tool = MagicMock()
-        scholar_tool.name = "google_scholar"
-
-        result = filter_tools_by_sources(
-            [scholar_tool],
-            ["web_search", "paper_search", "news_search", "knowledge_layer"],
-        )
-        assert scholar_tool in result
-
-
-class TestFilterToolsBySourcesSingleNewSource:
-    """Tests for filtering with only a single new source enabled."""
-
-    def test_only_news_search_excludes_web_tools(self):
-        """Test that enabling only news_search excludes web tools."""
-        web_tool = MagicMock()
-        web_tool.name = "web_search"
-        tavily_tool = MagicMock()
-        tavily_tool.name = "tavily_search"
-        news_tool = MagicMock()
-        news_tool.name = "news_feed"
-
-        result = filter_tools_by_sources([web_tool, tavily_tool, news_tool], ["news_search"])
-        assert news_tool in result
-        assert web_tool not in result
-        assert tavily_tool not in result
-
-    def test_only_news_search_includes_news_tools(self):
-        """Test that enabling only news_search includes news tools."""
-        news_tool = MagicMock()
-        news_tool.name = "news_aggregator"
-
-        result = filter_tools_by_sources([news_tool], ["news_search"])
-        assert news_tool in result
-
-    def test_only_news_search_includes_unmatched_tools(self):
-        """Test that enabling only news_search still includes unmatched tools."""
-        calculator = MagicMock()
-        calculator.name = "calculator"
-        code_tool = MagicMock()
-        code_tool.name = "code_executor"
-
-        result = filter_tools_by_sources([calculator, code_tool], ["news_search"])
-        assert calculator in result
-        assert code_tool in result
-
-    def test_only_news_search_excludes_paper_and_knowledge(self):
-        """Test that enabling only news_search excludes paper and knowledge tools."""
-        paper_tool = MagicMock()
-        paper_tool.name = "paper_search"
-        knowledge_tool = MagicMock()
-        knowledge_tool.name = "knowledge_search"
-        news_tool = MagicMock()
-        news_tool.name = "news_search_tool"
-
-        result = filter_tools_by_sources([paper_tool, knowledge_tool, news_tool], ["news_search"])
-        assert news_tool in result
-        assert paper_tool not in result
-        assert knowledge_tool not in result
-
-
-class TestFormatDataSourceToolsNewSources:
-    """Tests for format_data_source_tools with new paper_search and news_search sources."""
-
-    def test_format_paper_search_source(self):
-        """Test formatting paper_search data source."""
-        result = format_data_source_tools(["paper_search"])
-
-        assert len(result) == 1
-        assert result[0]["name"] == "paper_search"
-        assert "paper" in result[0]["description"].lower() or "academic" in result[0]["description"].lower()
-
-    def test_format_news_search_source(self):
-        """Test formatting news_search data source."""
-        result = format_data_source_tools(["news_search"])
-
-        assert len(result) == 1
-        assert result[0]["name"] == "news_search"
-        assert "news" in result[0]["description"].lower()
-
-    def test_format_paper_and_news_combined(self):
-        """Test formatting both paper_search and news_search together."""
-        result = format_data_source_tools(["paper_search", "news_search"])
-
-        assert len(result) == 2
-        names = [r["name"] for r in result]
-        assert "paper_search" in names
-        assert "news_search" in names
-
-    def test_format_all_new_sources_with_web(self):
-        """Test formatting web_search, paper_search, and news_search together."""
-        result = format_data_source_tools(["web_search", "paper_search", "news_search"])
-
-        assert len(result) == 3
-        names = [r["name"] for r in result]
-        assert "web_search" in names
-        assert "paper_search" in names
-        assert "news_search" in names
-
-    def test_format_paper_search_description_content(self):
-        """Test that paper_search description mentions academic/scholarly content."""
-        result = format_data_source_tools(["paper_search"])
-        desc = result[0]["description"].lower()
-        assert "academic" in desc or "scholar" in desc or "paper" in desc
-
-    def test_format_news_search_description_content(self):
-        """Test that news_search description mentions news content."""
-        result = format_data_source_tools(["news_search"])
-        desc = result[0]["description"].lower()
-        assert "news" in desc
-
-
-class TestDefaultDataSourcesUpdated:
-    """Tests for updated DEFAULT_DATA_SOURCES constant."""
-
-    def test_default_contains_paper_search(self):
-        """Test that default sources include paper_search."""
-        assert "paper_search" in DEFAULT_DATA_SOURCES
-
-    def test_default_contains_news_search(self):
-        """Test that default sources include news_search."""
-        assert "news_search" in DEFAULT_DATA_SOURCES
-
-    def test_default_contains_all_three_search_sources(self):
-        """Test that default sources include web_search, paper_search, and news_search."""
-        assert "web_search" in DEFAULT_DATA_SOURCES
-        assert "paper_search" in DEFAULT_DATA_SOURCES
-        assert "news_search" in DEFAULT_DATA_SOURCES
-
-    def test_default_has_expected_length(self):
-        """Test that default sources has exactly 3 entries."""
-        assert len(DEFAULT_DATA_SOURCES) == 3
+        assert result[0]["name"] == "Google Drive"
 
 
 class TestDefaultDataSources:
@@ -627,3 +381,51 @@ class TestDefaultDataSources:
     def test_default_is_list(self):
         """Test that default is a list."""
         assert isinstance(DEFAULT_DATA_SOURCES, list)
+
+
+class TestAllMappedToolsFilteredOut:
+    """Tests for all_mapped_tools_filtered_out predicate."""
+
+    def test_none_data_sources_returns_false(self):
+        """None means no filtering; nothing was filtered out."""
+        from aiq_agent.common.data_sources import all_mapped_tools_filtered_out
+
+        web_tool = MagicMock()
+        web_tool.name = "web_search_tool"
+        assert all_mapped_tools_filtered_out([web_tool], [web_tool], None) is False
+
+    def test_no_mapped_tools_in_input_returns_false(self):
+        """If the tools list had no mapped tools to begin with, nothing was lost."""
+        from aiq_agent.common.data_sources import all_mapped_tools_filtered_out
+
+        calculator = MagicMock()
+        calculator.name = "calculator"
+        assert all_mapped_tools_filtered_out([calculator], [calculator], ["web_search"]) is False
+
+    def test_empty_sources_drops_all_mapped_returns_true(self):
+        """data_sources=[] drops every mapped tool -> predicate fires."""
+        from aiq_agent.common.data_sources import all_mapped_tools_filtered_out
+
+        web_tool = MagicMock()
+        web_tool.name = "web_search_tool"
+        calculator = MagicMock()
+        calculator.name = "calculator"
+        assert all_mapped_tools_filtered_out([web_tool, calculator], [calculator], []) is True
+
+    def test_unknown_source_drops_all_mapped_returns_true(self):
+        """User requested a source that matches zero configured tools."""
+        from aiq_agent.common.data_sources import all_mapped_tools_filtered_out
+
+        web_tool = MagicMock()
+        web_tool.name = "web_search_tool"
+        assert all_mapped_tools_filtered_out([web_tool], [], ["nonexistent_source"]) is True
+
+    def test_some_mapped_tools_survive_returns_false(self):
+        """At least one mapped tool survived -> predicate does not fire."""
+        from aiq_agent.common.data_sources import all_mapped_tools_filtered_out
+
+        web_tool = MagicMock()
+        web_tool.name = "web_search_tool"
+        knowledge_tool = MagicMock()
+        knowledge_tool.name = "knowledge_search"
+        assert all_mapped_tools_filtered_out([web_tool, knowledge_tool], [web_tool], ["web_search"]) is False

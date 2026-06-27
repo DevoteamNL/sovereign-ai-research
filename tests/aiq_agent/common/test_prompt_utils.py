@@ -154,11 +154,14 @@ class TestRenderPromptTemplate:
         result = render_prompt_template(template, name="test", items=[1, 2, 3])
         assert result == "Name: TEST, Length: 3"
 
-    def test_render_undefined_variable_silent(self):
-        """Test that undefined variables render as empty string (Undefined mode)."""
+    def test_render_undefined_variable_error(self):
+        """Test that undefined variables raise PromptError."""
         template = "Hello, {{ undefined_var }}!"
-        result = render_prompt_template(template)
-        assert result == "Hello, !"
+
+        with pytest.raises(PromptError) as exc_info:
+            render_prompt_template(template)
+
+        assert "Failed to render template" in str(exc_info.value)
 
     def test_render_syntax_error(self):
         """Test that template syntax errors raise PromptError."""

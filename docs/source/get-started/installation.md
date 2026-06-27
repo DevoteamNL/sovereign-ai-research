@@ -18,7 +18,6 @@ This guide walks through setting up the AI-Q blueprint for local development. Fo
 
 You also need at least one LLM API key. Refer to [API key setup](#api-key-setup) below.
 
-> *Dependency Note:* This release is pinned to *NeMo Agent Toolkit (NAT) v1.4.0* (nvidia-nat==1.4.0). NAT v1.5 or later is *not yet supported* by AI-Q and upgrading may introduce breaking changes. The pin will be lifted in a future AI-Q release once compatibility has been validated.
 
 ### Hardware Requirements
 
@@ -26,8 +25,8 @@ When using [NVIDIA API Catalog](https://build.nvidia.com/) (the default), infere
 
 | Component | Default Model | Self-Hosted Hardware Reference |
 |-----------|---------------|-------------------------------|
-| LLM (intent classifier, orchestrator, planner) | `nvidia/nemotron-3-nano-30b-a3b` | [Nemotron 3 Nano support matrix](https://docs.nvidia.com/nim/large-language-models/latest/supported-models.html#nvidia-nemotron-3-nano) |
-| LLM (deep research researcher) | `nvidia/nemotron-3-nano-30b-a3b` (default) or `nvidia/nemotron-3-super-120b-a12b` (optional) | [Nemotron 3 Nano support matrix](https://docs.nvidia.com/nim/large-language-models/latest/supported-models.html#nvidia-nemotron-3-nano), [Nemotron 3 Super support matrix](https://docs.nvidia.com/nim/large-language-models/latest/supported-models.html#nvidia-nemotron-3-super) |
+| LLM (intent classifier, orchestrator, planner) | `nvidia/nemotron-3-super-120b-a12b` | [Nemotron 3 Super support matrix](https://docs.nvidia.com/nim/large-language-models/latest/supported-models.html#nvidia-nemotron-3-super) |
+| LLM (deep research researcher) | `nvidia/nemotron-3-super-120b-a12b` | [Nemotron 3 Super support matrix](https://docs.nvidia.com/nim/large-language-models/latest/supported-models.html#nvidia-nemotron-3-super) |
 | LLM (deep research orchestrator/planner, optional) | `openai/gpt-oss-120b` | [GPT OSS support matrix](https://docs.nvidia.com/nim/large-language-models/latest/supported-models.html#gpt-oss-120b) |
 | Document summary (optional) | `nvidia/nemotron-mini-4b-instruct` | [Nemotron Mini 4B](https://build.nvidia.com/nvidia/nemotron-mini-4b-instruct/) |
 | Text embedding | `nvidia/llama-nemotron-embed-vl-1b-v2` | [NeMo Retriever embedding support matrix](https://docs.nvidia.com/nim/nemo-retriever/text-embedding/latest/support-matrix.html) |
@@ -52,7 +51,7 @@ The script performs the following steps:
 3. Installs the core package with dev dependencies
 4. Installs all frontends (CLI, debug console, API server)
 5. Installs benchmark packages (freshqa, deepsearch_qa)
-6. Installs all data source plugins (Tavily, Google Scholar, knowledge layer)
+6. Installs all data source plugins (Tavily, Exa, Google Scholar, knowledge layer)
 7. Sets up pre-commit hooks
 8. Copies `deploy/.env.example` to `deploy/.env` if no `.env` file exists
 9. Installs UI npm dependencies (if Node.js is available)
@@ -96,6 +95,7 @@ uv pip install -e ./frontends/aiq_api      # Unified API server (includes debug)
 
 # Data sources (pick what you need)
 uv pip install -e ./sources/tavily_web_search
+uv pip install -e ./sources/exa_web_search
 uv pip install -e ./sources/google_scholar_paper_search
 uv pip install -e "./sources/knowledge_layer[llamaindex,foundational_rag]"
 
@@ -130,10 +130,11 @@ Then edit `deploy/.env` and fill in your keys.
 
 | Variable | Provider | Purpose |
 |----------|----------|---------|
-| `TAVILY_API_KEY` | [Tavily](https://tavily.com/) | Web search |
+| `TAVILY_API_KEY` | [Tavily](https://tavily.com/) | Web search (Tavily provider) |
+| `EXA_API_KEY` | [Exa](https://exa.ai/) | Web search (Exa provider) |
 | `SERPER_API_KEY` | [Serper](https://serper.dev/) | Academic paper search (Google Scholar). To enable, uncomment `paper_search_tool` in your config file |
 
-At minimum, you need `NVIDIA_API_KEY` for LLM inference and `TAVILY_API_KEY` for web search. Paper search (`SERPER_API_KEY`) is disabled by default in the shipped configs -- refer to the comments in your config file to enable it.
+At minimum, you need `NVIDIA_API_KEY` for LLM inference and one of `TAVILY_API_KEY` or `EXA_API_KEY` for web search. Paper search (`SERPER_API_KEY`) is disabled by default in the shipped configs -- refer to the comments in your config file to enable it.
 
 ### OpenAI-compatible Endpoints (vLLM / MaaS)
 

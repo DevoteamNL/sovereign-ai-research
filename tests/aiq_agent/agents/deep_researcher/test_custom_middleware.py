@@ -15,6 +15,7 @@
 
 """Tests for custom middleware."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 
@@ -24,6 +25,10 @@ from langchain_core.messages import ToolMessage
 
 from aiq_agent.agents.deep_researcher.custom_middleware import SourceRegistryMiddleware
 from aiq_agent.agents.deep_researcher.custom_middleware import ToolNameSanitizationMiddleware
+from aiq_agent.agents.deep_researcher.tools.source_registry import build_get_verified_sources_tool
+from aiq_agent.common.citation_verification import SourceEntry
+from aiq_agent.common.data_source_registry import populate_from_config
+from aiq_agent.common.data_source_registry import reset_registry
 
 
 class TestToolNameSanitizationMiddleware:
@@ -126,8 +131,46 @@ class TestSourceRegistryMiddleware:
     def source_tools(self):
         return {"advanced_web_search_tool", "knowledge_search", "paper_search_tool"}
 
+    @pytest.fixture(autouse=True)
+    def _reset_data_source_registry(self):
+        """Keep the global data_source_registry clean across tests.
+
+        Tests that need a populated registry either depend on
+        ``_default_data_sources`` (via the ``middleware`` fixture) or
+        populate their own registry explicitly in the test body.
+        """
+        reset_registry()
+        yield
+        reset_registry()
+
     @pytest.fixture
-    def middleware(self, source_tools):
+    def _default_data_sources(self):
+        """Populate the three default data sources used by the shared tests."""
+        populate_from_config(
+            [
+                {
+                    "id": "web_search",
+                    "name": "Web Search",
+                    "description": "Search the web for real-time information.",
+                    "tools": ["advanced_web_search_tool"],
+                },
+                {
+                    "id": "knowledge_layer",
+                    "name": "Knowledge Base",
+                    "description": "Search uploaded documents and files.",
+                    "tools": ["knowledge_search"],
+                },
+                {
+                    "id": "paper_search",
+                    "name": "Academic Papers",
+                    "description": "Search academic papers.",
+                    "tools": ["paper_search_tool"],
+                },
+            ]
+        )
+
+    @pytest.fixture
+    def middleware(self, source_tools, _default_data_sources):
         return SourceRegistryMiddleware(source_tool_names=source_tools)
 
     def _make_request(self, tool_name: str):
@@ -210,6 +253,79 @@ class TestSourceRegistryMiddleware:
         assert len(middleware.registry.all_sources()) == 0
 
     @pytest.mark.asyncio
+    async def test_allowlisted_tool_not_in_data_source_registry_is_still_captured(self):
+        """Agent-loaded tools are captured even when not declared under data_sources.
+
+        Tools may be passed directly to the agent (programmatically or via
+        `tools:` in YAML) without being declared under `data_sources:`. Their
+        outputs are still real, citable evidence and must contribute to the
+        citation registry.
+        """
+        # Autouse fixture already reset the registry; leave it empty.
+        mw = SourceRegistryMiddleware(source_tool_names={"mcp_time__get_current_time"})
+        content = "2026-05-11T14:30:00+09:00"
+        handler = AsyncMock(return_value=self._make_tool_result(content))
+        request = self._make_request("mcp_time__get_current_time")
+
+        await mw.awrap_tool_call(request, handler)
+
+        sources = mw.registry.all_sources()
+        assert len(sources) == 1
+        assert sources[0].citation_key == "mcp_time__get_current_time"
+        assert sources[0].source_type == "tool_result"
+
+    @pytest.mark.asyncio
+    async def test_registered_group_tool_without_urls_captured(self):
+        """Registered group child tools without URLs can be non-URL citation sources."""
+        populate_from_config(
+            [
+                {
+                    "id": "mcp_time",
+                    "name": "MCP Time",
+                    "description": "Get current time and timezone information through MCP.",
+                    "tools": ["mcp_time"],
+                }
+            ],
+            group_names={"mcp_time"},
+        )
+        mw = SourceRegistryMiddleware(source_tool_names={"mcp_time__get_current_time"})
+        content = "2026-05-11T14:30:00+09:00"
+        handler = AsyncMock(return_value=self._make_tool_result(content))
+        request = self._make_request("mcp_time__get_current_time")
+
+        await mw.awrap_tool_call(request, handler)
+
+        sources = mw.registry.all_sources()
+        assert len(sources) == 1
+        assert sources[0].citation_key == "mcp_time__get_current_time"
+        assert sources[0].source_type == "tool_result"
+
+    @pytest.mark.asyncio
+    async def test_registered_exact_data_source_tool_without_urls_captured(self):
+        """Any exact tool declared under data_sources can be a non-URL citation source."""
+        populate_from_config(
+            [
+                {
+                    "id": "weather_observations",
+                    "name": "Weather Observations",
+                    "description": "Current observed weather conditions.",
+                    "tools": ["weather_observation_tool"],
+                }
+            ]
+        )
+        mw = SourceRegistryMiddleware(source_tool_names={"weather_observation_tool"})
+        content = "Current conditions for San Francisco: clear, 68F"
+        handler = AsyncMock(return_value=self._make_tool_result(content))
+        request = self._make_request("weather_observation_tool")
+
+        await mw.awrap_tool_call(request, handler)
+
+        sources = mw.registry.all_sources()
+        assert len(sources) == 1
+        assert sources[0].citation_key == "weather_observation_tool"
+        assert sources[0].source_type == "tool_result"
+
+    @pytest.mark.asyncio
     async def test_mixed_source_tools(self, middleware):
         """Multiple tool calls — only allowlisted tools contribute sources."""
         h1 = AsyncMock(return_value=self._make_tool_result("See https://a.com"))
@@ -221,6 +337,47 @@ class TestSourceRegistryMiddleware:
         urls = {s.url for s in middleware.registry.all_sources()}
         assert "https://a.com" in urls
         assert "https://b.com" in urls
+
+    def test_get_verified_sources_defaults_to_research_note_compact_subset(self, middleware):
+        """The writer-facing source list prefers sources carried forward by ResearchNotes."""
+        middleware.registry.add(SourceEntry(url="https://used.example/report", title="Used Report"))
+        middleware.registry.add(SourceEntry(url="https://unused.example/report", title="Unused Report"))
+        middleware.register_research_note_sources(
+            [SimpleNamespace(sources=[SimpleNamespace(locator="https://used.example/report")])]
+        )
+        tool = build_get_verified_sources_tool(middleware)
+
+        compact = tool.invoke({})
+        full = tool.invoke({"mode": "full"})
+        compact_entries = middleware.get_source_entries()
+        full_entries = middleware.get_source_entries(mode="full")
+
+        assert "https://used.example/report" in compact
+        assert "https://unused.example/report" not in compact
+        assert [entry.url for entry in compact_entries] == ["https://used.example/report"]
+        assert "https://used.example/report" in full
+        assert "https://unused.example/report" in full
+        assert {entry.url for entry in full_entries} == {
+            "https://used.example/report",
+            "https://unused.example/report",
+        }
+
+    def test_get_verified_sources_compact_matches_internal_citation_keys(self, middleware):
+        """Compact source filtering also works for URL-less internal citation keys."""
+        middleware.registry.add(SourceEntry(citation_key="report.pdf, p.5", title="report.pdf"))
+        middleware.registry.add(SourceEntry(citation_key="other.pdf, p.9", title="other.pdf"))
+        middleware.register_research_note_sources(
+            [SimpleNamespace(sources=[SimpleNamespace(locator="report.pdf, p.5")])]
+        )
+        tool = build_get_verified_sources_tool(middleware)
+
+        compact = tool.invoke({})
+        full = tool.invoke({"mode": "full"})
+
+        assert "report.pdf, p.5" in compact
+        assert "other.pdf, p.9" not in compact
+        assert "report.pdf, p.5" in full
+        assert "other.pdf, p.9" in full
 
     # -- Edge cases --
 
