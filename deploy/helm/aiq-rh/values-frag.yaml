@@ -27,6 +27,9 @@ apps:
       # Optional: Collection name for document storage
       # COLLECTION_NAME: default_collection
 
+      # OpenTelemetry certificate for HTTPS MLflow connection
+      OTEL_EXPORTER_OTLP_CERTIFICATE: /etc/ssl/certs/openshift-service-ca.crt
+
     # Mount custom NGC+RAG config file and data storage
     volumeMounts:
     - name: frag-config
@@ -34,6 +37,10 @@ apps:
       readOnly: true
     - name: data-storage
       mountPath: /app/data
+    - name: service-ca
+      mountPath: /etc/ssl/certs/openshift-service-ca.crt
+      subPath: service-ca.crt
+      readOnly: true
 
     volumes:
     - name: postgres-init
@@ -42,6 +49,9 @@ apps:
     - name: frag-config
       configMap:
         name: aiq-frag-config
+    - name: service-ca
+      configMap:
+        name: openshift-service-ca.crt
     - name: data-storage
       emptyDir: {}
 

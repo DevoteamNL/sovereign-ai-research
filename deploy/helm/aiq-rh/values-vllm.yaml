@@ -26,6 +26,9 @@ apps:
       VLLM_SUMMARY_BASE_URL: http://nemotron-mini-4b-predictor.ns-aiq.svc.cluster.local:8080
       VLLM_API_KEY: no-key  # vLLM servers don't require auth by default
 
+      # OpenTelemetry certificate for HTTPS MLflow connection
+      OTEL_EXPORTER_OTLP_CERTIFICATE: /etc/ssl/certs/openshift-service-ca.crt
+
       # Model names (should match servedModelName in vllm-models chart)
       # VLLM_INTENT_MODEL: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
       # VLLM_RESEARCHER_MODEL: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
@@ -43,6 +46,10 @@ apps:
       readOnly: true
     - name: data-storage
       mountPath: /app/data
+    - name: service-ca
+      mountPath: /etc/ssl/certs/openshift-service-ca.crt
+      subPath: service-ca.crt
+      readOnly: true
 
     volumes:
     - name: postgres-init
@@ -51,6 +58,9 @@ apps:
     - name: vllm-config
       configMap:
         name: aiq-vllm-config
+    - name: service-ca
+      configMap:
+        name: openshift-service-ca.crt
     - name: data-storage
       emptyDir: {}
 
