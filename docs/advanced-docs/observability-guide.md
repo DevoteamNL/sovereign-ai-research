@@ -312,11 +312,14 @@ Uninstall in reverse order (resources first, then operators):
 
 ```bash
 # Resources
-helm uninstall mlflow -n observability-hub
+helm uninstall mlflow -n redhat-ods-applications
 helm uninstall logging-stack -n openshift-logging
 helm uninstall grafana -n observability-hub
 helm uninstall uwm
 helm uninstall otel-collector -n observability-hub
+
+# Clean up orphaned User Workload Monitoring ConfigMap
+oc delete configmap user-workload-monitoring-config -n openshift-user-workload-monitoring 2>/dev/null || true
 
 # Operators (will also delete their namespaces)
 helm uninstall otel-op
@@ -325,7 +328,7 @@ helm uninstall cluster-obs
 helm uninstall logging-op
 ```
 
-**Note:** Namespaces may take several minutes to fully terminate.
+**Note:** Namespaces may take several minutes to fully terminate. The User Workload Monitoring ConfigMap is managed by the cluster-monitoring-operator and may persist after Helm uninstall, which can cause conflicts on reinstall.
 
 ## Best Practices
 

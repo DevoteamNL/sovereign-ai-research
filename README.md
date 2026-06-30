@@ -389,6 +389,9 @@ helm uninstall grafana -n observability-hub
 helm uninstall uwm
 helm uninstall otel-collector -n observability-hub
 
+# Clean up orphaned User Workload Monitoring ConfigMap (if it exists)
+oc delete configmap user-workload-monitoring-config -n openshift-user-workload-monitoring 2>/dev/null || true
+
 # Uninstall operators (this will also delete their namespaces)
 helm uninstall otel-op
 helm uninstall grafana-op
@@ -396,7 +399,7 @@ helm uninstall cluster-obs
 helm uninstall logging-op
 ```
 
-**Note:** Helm will automatically delete namespaces created by the operator charts. Namespaces may take a few minutes to fully terminate.
+**Note:** Helm will automatically delete namespaces created by the operator charts. Namespaces may take a few minutes to fully terminate. The User Workload Monitoring ConfigMap may persist after uninstall and should be manually deleted to avoid conflicts on reinstall.
 
 ## Customization
 
