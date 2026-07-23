@@ -152,7 +152,7 @@ Copy this token value.
 
 **Step 2: Update the AI-Q values file**
 
-Edit `deploy/helm/aiq-rh/values.yaml` and replace `{YOUR_TOKEN_HERE}` with the token from Step 1:
+Edit your target values file and replace `{YOUR_TOKEN_HERE}` with the token from Step 1:
 
 ```yaml
 # Find this section in values.yaml (around line 80-90)
