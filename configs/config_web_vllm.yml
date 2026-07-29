@@ -37,17 +37,25 @@ general:
 
 llms:
   # Intent classification — fast, small model
-  # Defaults to VLLM_BASE_URL (same endpoint as other roles). Only set
-  # VLLM_INTENT_BASE_URL when running a mixed-model setup where intent
-  # classification is served by a separate vLLM instance from the other LLMs.
+  # Set VLLM_INTENT_BASE_URL alongside VLLM_BASE_URL (same value unless intent
+  # classification is served by a separate vLLM instance). NAT's env expansion
+  # does not support nested ${VAR:-${OTHER}} defaults, so this cannot fall
+  # back to VLLM_BASE_URL automatically — leaving it unset uses localhost.
   intent_llm:
     _type: openai
     model_name: ${VLLM_INTENT_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
-    base_url: ${VLLM_INTENT_BASE_URL:-${VLLM_BASE_URL:-http://localhost:8000}}/v1
+    base_url: ${VLLM_INTENT_BASE_URL:-http://localhost:8000}/v1
     api_key: ${VLLM_API_KEY:-no-key}
     temperature: 0.5
     top_p: 0.9
     max_tokens: ${VLLM_INTENT_MAX_TOKENS:-1024}
+    # Reasoning control. Default null = no directive, which is safe on ANY model.
+    # VLLM_THINKING=false injects /no_think (Nemotron only — NAT's GatedFieldMixin
+    # raises on other models). Provided as an escape hatch, NOT a performance fix:
+    # A/B testing on Nemotron-3-Super showed /no_think does not reduce latency or
+    # token count, and this build emits no separated reasoning trace for our
+    # prompts. See docs/source/customization/vllm-results.md.
+    thinking: ${VLLM_THINKING:-null}
 
   # Shallow research and general agent work
   researcher_llm:
@@ -58,6 +66,7 @@ llms:
     temperature: 0.1
     top_p: 0.3
     max_tokens: ${VLLM_RESEARCHER_MAX_TOKENS:-16384}
+    thinking: ${VLLM_THINKING:-null}
 
   # Deep research orchestrator and planner — large context model
   orchestrator_llm:
@@ -68,6 +77,21 @@ llms:
     temperature: 1.0
     top_p: 1.0
     max_tokens: ${VLLM_ORCHESTRATOR_MAX_TOKENS:-128000}
+    thinking: ${VLLM_THINKING:-null}
+
+  # Final report synthesis (deep research writer) and report follow-up Q&A.
+  # Kept separate from orchestrator_llm: report follow-up resolves
+  # `writer_llm or orchestrator_llm` and runs under a hard, non-configurable
+  # module timeout, so it must not inherit the orchestrator's large max_tokens.
+  writer_llm:
+    _type: openai
+    model_name: ${VLLM_WRITER_MODEL:-meta-llama/Llama-3.1-70B-Instruct}
+    base_url: ${VLLM_BASE_URL:-http://localhost:8000}/v1
+    api_key: ${VLLM_API_KEY:-no-key}
+    temperature: 0.7
+    top_p: 0.7
+    max_tokens: ${VLLM_WRITER_MAX_TOKENS:-16384}
+    thinking: ${VLLM_THINKING:-null}
 
   # Document summarization — small, fast model
   summary_llm:
@@ -77,6 +101,7 @@ llms:
     api_key: ${VLLM_API_KEY:-no-key}
     temperature: 0.3
     max_tokens: 100
+    thinking: ${VLLM_THINKING:-null}
 
 functions:
   # =========================================================================
@@ -142,14 +167,19 @@ functions:
     llm: intent_llm
     # tools: omitted -> inherits all from data_source_registry
     verbose: true
+    # Per-call LLM timeout (seconds) for intent classification. Default 90; raise
+    # via env for slow self-hosted endpoints (e.g. a large quantized model on
+    # modest hardware). This is the field IntentClassifierConfig actually reads.
+    llm_timeout: ${VLLM_LLM_TIMEOUT:-90}
 
   clarifier_agent:
     _type: clarifier_agent
     llm: researcher_llm
-    planner_llm: researcher_llm
     # tools: omitted -> inherits all from data_source_registry
+    # NOTE: planner_llm / enable_plan_approval / max_plan_iterations were removed
+    # from ClarifierConfig upstream (AI-Q 2.2, d942536) — plan approval is gone and
+    # planning moved inside the deep-research workflow. They are inert on 2.1 too.
     max_turns: 3
-    enable_plan_approval: true
     log_response_max_chars: 2000
     verbose: true
 
@@ -168,10 +198,12 @@ functions:
     orchestrator_llm: orchestrator_llm
     researcher_llm: researcher_llm
     planner_llm: orchestrator_llm
+    writer_llm: writer_llm
     # tools: omitted -> inherits all from data_source_registry
     exclude_tools:                     # Remove basic variant; deep uses advanced_web_search_tool
       - web_search_tool
-    max_loops: 2
+    # NOTE: no max_loops here — it was never a DeepResearchAgentConfig field, and
+    # upstream AI-Q 2.2 sets extra="forbid", making any stray key a hard load error.
     verbose: true
 
 workflow:
@@ -180,7 +212,4 @@ workflow:
   enable_escalation: true
   enable_clarifier: true
   use_async_deep_research: true
-  # Intent-classifier LLM timeout (seconds). Default 90; raise via env for slow
-  # self-hosted endpoints (e.g. a large quantized model on modest hardware).
-  llm_timeout: ${VLLM_LLM_TIMEOUT:-90}
   checkpoint_db: ${AIQ_CHECKPOINT_DB:-./checkpoints.db}
