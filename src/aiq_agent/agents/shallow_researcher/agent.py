@@ -395,8 +395,8 @@ class ShallowResearcherAgent:
                     )
                     raise EmptySourceRegistryError(
                         "shallow research",
-                        unavailable,
-                        available_count,
+                        unavailable_tools=unavailable,
+                        available_count=available_count,
                         tool_errors=tool_errors,
                     )
 
