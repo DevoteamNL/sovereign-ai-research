@@ -81,9 +81,9 @@ DEFAULT_CLARIFICATION_PROMPT = (
 """Fallback prompt used when the prompt file cannot be loaded."""
 
 DEFAULT_PLAN_GENERATION_PROMPT = (
+    "/no_think\n\n"
     "Generate a research plan with a title and 5-8 sections. "
-    "Respond concisely with only valid JSON, no explanation. "
-    'Format: {"title": "...", "sections": ["...", "..."]}'
+    'Respond with JSON: {"title": "...", "sections": ["...", "..."]}'
 )
 """Fallback prompt for plan generation."""
 
