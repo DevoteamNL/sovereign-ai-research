@@ -269,8 +269,13 @@ class TestShallowResearchE2E:
         assert r.status_code == 200, f"Submit failed: {r.text}"
         job_id = r.json()["job_id"]
 
-        # Poll for completion (timeout 120s for slow inference)
-        terminal_states = {"completed", "failed", "failure", "cancelled"}
+        # Poll for completion (timeout 120s for slow inference).
+        # These MUST match nat.front_ends.fastapi.async_jobs.job_store.JobStatus:
+        # submitted / running / success / failure / interrupted / not_found.
+        # A previous version used {"completed", "failed", "cancelled"}, none of which
+        # the API ever returns -- so a successful job polled until timeout and the
+        # report assertion below was unreachable.
+        terminal_states = {"success", "failure", "interrupted", "not_found"}
         deadline = time.time() + 120
         status = None
         while time.time() < deadline:
@@ -282,12 +287,12 @@ class TestShallowResearchE2E:
 
         assert status in terminal_states, f"Job {job_id} stuck in {status} after 120s"
 
-        if status == "completed":
+        if status == "success":
             # Verify report has content
             r = httpx.get(f"{AIQ_BASE_URL}/v1/jobs/async/job/{job_id}/report", timeout=10)
             if r.status_code == 200:
                 report = r.json()
-                assert report.get("report") or report.get("output"), f"Empty report for completed job {job_id}"
+                assert report.get("report") or report.get("output"), f"Empty report for successful job {job_id}"
 
 
 # ===========================================================================
