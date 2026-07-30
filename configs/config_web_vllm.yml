@@ -35,6 +35,35 @@ general:
       expose_headers:
         - "*"
 
+# ===========================================================================
+# max_tokens sizing — READ THIS BEFORE CHANGING THE DEFAULTS BELOW
+#
+# The committed max_tokens defaults deliberately match NIM scale. vLLM-hosted
+# is NOT a synonym for small: on Red Hat AI (OpenShift AI / KServe) we serve
+# Nemotron-3-scale models (Super 120b-a12b, Ultra 550b-a55b) through vLLM just
+# as readily as through NIM. A default tuned for a 16k endpoint would silently
+# truncate deep-research synthesis on the large-context deployments this config
+# is built for. Scale DOWN for constrained endpoints; do not lower the default.
+#
+# HARD CONSTRAINT: max_tokens must be <= the server's --max-model-len, or vLLM
+# returns HTTP 400. This depends on how the endpoint was LAUNCHED, not on how
+# big the model is — serving-side tuning for throughput routinely shrinks the
+# window far below what the model supports. (On the DGX Spark, --max-model-len
+# was cut 262144 -> 32768 to buy concurrency, so a 120B model needed
+# VLLM_ORCHESTRATOR_MAX_TOKENS=8192.)
+#
+# To size: read the real window from `curl $VLLM_BASE_URL/v1/models`
+# (max_model_len), keep every role strictly below it with prompt headroom, and
+# allow 2-3x on reasoning models where hidden reasoning tokens count toward the
+# budget. Override per role via env — do not edit these defaults:
+#   VLLM_INTENT_MAX_TOKENS  VLLM_RESEARCHER_MAX_TOKENS
+#   VLLM_ORCHESTRATOR_MAX_TOKENS  VLLM_WRITER_MAX_TOKENS
+#
+# Startup validation (validate_llm_endpoints) warns when max_tokens exceeds the
+# endpoint's reported context window. See docs/source/customization/
+# vllm-decisions.md (Decision 6) for the full rationale and two case studies.
+# ===========================================================================
+
 llms:
   # Intent classification — fast, small model
   # Set VLLM_INTENT_BASE_URL alongside VLLM_BASE_URL (same value unless intent
@@ -48,7 +77,13 @@ llms:
     api_key: ${VLLM_API_KEY:-no-key}
     temperature: 0.5
     top_p: 0.9
-    max_tokens: ${VLLM_INTENT_MAX_TOKENS:-1024}
+    # 4096 matches every NIM config. Do NOT lower this: on a truncated response
+    # vLLM returns content=None with finish_reason="length" and no error, and the
+    # intent classifier silently defaults to SHALLOW research with no log line
+    # (chat_researcher/nodes/intent_classifier.py). Deep research then never
+    # triggers and the logs look clean. Reasoning models spend part of this budget
+    # on hidden reasoning tokens before emitting any JSON.
+    max_tokens: ${VLLM_INTENT_MAX_TOKENS:-4096}
     # Reasoning control. Default null = no directive, which is safe on ANY model.
     # VLLM_THINKING=false injects /no_think (Nemotron only — NAT's GatedFieldMixin
     # raises on other models). Provided as an escape hatch, NOT a performance fix:
@@ -100,7 +135,11 @@ llms:
     base_url: ${VLLM_BASE_URL:-http://localhost:8000}/v1
     api_key: ${VLLM_API_KEY:-no-key}
     temperature: 0.3
-    max_tokens: 100
+    # Env-overridable, unlike the NIM configs' hardcoded 100: VLLM_SUMMARY_MODEL is
+    # operator-supplied and may be the same reasoning endpoint as every other role,
+    # where 100 tokens is consumed before any content is emitted. A truncated
+    # summary is stored silently as an empty string.
+    max_tokens: ${VLLM_SUMMARY_MAX_TOKENS:-512}
     thinking: ${VLLM_THINKING:-null}
 
 functions:

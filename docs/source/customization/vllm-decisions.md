@@ -45,20 +45,30 @@ AI-Q Blueprint v2.0 was originally built exclusively for NVIDIA NIM endpoints (`
 | `VLLM_ORCHESTRATOR_MAX_TOKENS` | `128000` | Max tokens for orchestrator |
 
 
-## Decision 3: Model-Aware Thinking Prefixes
+## Decision 3: Reasoning control via NAT's `thinking:` field (superseded)
 
-**Decision:** Instead of blanket-removing NIM thinking directives (`/think`, `/no_think`), make the prefix system model-aware so it only emits directives for models that understand them.
+**Current decision:** Reasoning control is configuration, handled by NAT's `ThinkingMixin` — the `thinking:` field on each LLM role in `config_web_vllm.yml`. There is no local helper.
 
-**Why:**
-- Nemotron models use `/no_think` and `/think` as performance optimization directives
-- These tokens are meaningless noise to Llama, Qwen, and other models — they can confuse the model or leak into output
-- Blanket removal would break Nemotron when mixing providers in the same config
+**Superseded (2026-07-30):** this project previously carried `is_nemotron()` / `get_thinking_prefix()` in `prompt_utils.py`, which prepended `/think` or `/no_think` to system prompts. **Both were removed**, along with their tests and three call sites. Two measurements drove that:
 
-**Implementation:** `get_thinking_prefix(llm, enable)` in `prompt_utils.py` inspects the LLM's model name:
-- Nemotron → returns `/no_think\n\n` or `/think\n\n`
-- All other models → returns `""` (empty string)
+1. **The premise was wrong.** The helper gated directives to NIM endpoints only, documented as *"vLLM serves the same models but does not interpret /think or /no_think directives — they get echoed as literal text."* Not true: vLLM with a reasoning parser consumes the directive cleanly. Sending `/think` to Nemotron-3-Super on vLLM produced ~465 reasoning tokens, and the directive never appeared in the output.
+2. **What it gated is a no-op.** Measured against `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4`, 3 runs each:
 
-**Trade-off:** Requires pattern matching on model names, which could break if Nemotron naming conventions change. Mitigated by keeping the patterns simple and centralized.
+   | Condition | completion tokens (median) |
+   | :-- | :-- |
+   | no directive | 49 |
+   | `/no_think` | 49 |
+   | `/think` | 465 |
+
+   The model does not emit a reasoning trace by default, so *suppressing* reasoning changes nothing. `/think` **enables** it at ~9.5x the tokens. The long-held theory that unsuppressed reasoning was the latency bomb on self-hosted endpoints is disproven — see [vLLM results](vllm-results.md).
+
+Keeping the helper would have meant carrying ~390 lines of fork deviation, plus duplicating a mechanism the framework already provides.
+
+**What to use instead:** set `thinking:` per role. The config ships `thinking: ${VLLM_THINKING:-null}`; `null` means no directive and is safe on any model.
+
+**Footgun:** `ThinkingMixin` is gated to Nemotron model names and **raises at config load** on anything else. `VLLM_THINKING=false` against a non-Nemotron model (including this config's default `Qwen/Qwen2.5-72B-Instruct` orchestrator) fails startup rather than degrading quietly. Leave it `null` unless every role is Nemotron — and note that per the table above, setting it buys nothing measurable.
+
+**Retained from the old approach:** the fallback prompts in `clarifier/agent.py` and `intent_classifier.py` no longer hardcode `/no_think`. Upstream's versions do, which sends a literal Nemotron directive to whatever model is configured. Keeping those prompts model-agnostic is still correct.
 
 
 ## Decision 4: Startup Endpoint Validation
@@ -96,17 +106,45 @@ The original config validation assumed local endpoints don't need API keys (base
 **Bug found:** The original `_extract_env_var` regex matched the full `VAR:-default` string as the variable name, causing `os.getenv("VLLM_API_KEY:-no-key")` which always returned None. Fixed by splitting the regex into name and default capture groups.
 
 
-## Decision 6: Configurable max_tokens for Orchestrator
+## Decision 6: Configurable max_tokens per LLM role
 
-**Decision:** Make `max_tokens` for the deep research orchestrator configurable via `VLLM_ORCHESTRATOR_MAX_TOKENS` environment variable.
+**Decision:** Keep the committed `max_tokens` defaults at **NIM scale**, and make every role overridable by environment variable — `VLLM_INTENT_MAX_TOKENS`, `VLLM_RESEARCHER_MAX_TOKENS`, `VLLM_ORCHESTRATOR_MAX_TOKENS`, `VLLM_WRITER_MAX_TOKENS`.
 
-**Why:**
-- The NIM config uses `max_tokens: 128000` for GPT-OSS-120B, which has a 256k context window
-- Smaller models on MaaS endpoints often have 16k-40k context windows
-- Hardcoding `max_tokens` in the config means every MaaS deployment requires editing the YAML
-- Making it an env var follows the same pattern as other vLLM config values
+**Default:** orchestrator `128000`, researcher `16384`, writer `16384`, intent `1024`. These match the NIM configuration deliberately — see the sizing note below before lowering them.
 
-**Default:** 128000 (matches the NIM config for large models). MaaS users override it based on their model's context window.
+**Why match NIM scale rather than pick a "safe" small default:**
+
+vLLM-hosted is **not** a synonym for small. On Red Hat AI (OpenShift AI / KServe), we deploy Nemotron-3-scale models — Super `120b-a12b`, Ultra `550b-a55b` — through vLLM just as readily as through NIM. The serving stack is an operational choice, not a capability tier. A default tuned for a 16k MaaS endpoint would silently truncate deep-research synthesis on exactly the large-context deployments this configuration is built for.
+
+So the committed defaults assume a capable endpoint, and operators scale *down* for constrained ones.
+
+### The hard constraint: `max_tokens` must be ≤ the served `--max-model-len`
+
+This is a coupling between this configuration and how the endpoint is launched, and vLLM enforces it with an **HTTP 400**. It is not model-dependent — it depends entirely on what `--max-model-len` the server was started with.
+
+Two real incidents:
+
+1. **Red Hat MaaS, `qwen3-14b`, 40k context.** Deep research failed with `400 Bad Request`. The failure surfaced only after minutes of research, once report generation had accumulated enough context to cross the limit.
+2. **DGX Spark, Nemotron-3-Super.** A KV-cache fix reduced `--max-model-len` from 262144 to 32768 to buy concurrency (KV cache 7.62 → 23.29 GiB, concurrency 1.25x → 30.54x). The *model* was large, but the *served window* was now 32k — so `max_tokens: 128000` was rejected. Resolved with `VLLM_ORCHESTRATOR_MAX_TOKENS=8192`.
+
+The second case is the important one: **a large model does not guarantee a large served window.** Serving-side tuning for throughput routinely shrinks `--max-model-len` well below what the model supports.
+
+### Sizing guidance for vLLM-hosted setups
+
+1. Read the server's actual window — `curl $VLLM_BASE_URL/v1/models` reports `max_model_len`, and it is logged at vLLM startup.
+2. Keep every role's `max_tokens` **strictly below** it, leaving headroom for the prompt. The value is an *output* budget, but the server rejects requests where prompt + `max_tokens` exceeds the window.
+3. On reasoning models (Nemotron, Qwen3.5, Kimi K2.5), hidden reasoning tokens count toward the budget — allow 2-3x the expected content length.
+4. Override per role via env; do not edit the committed YAML.
+
+Startup validation catches this before any user query: `validate_llm_endpoints` probes each configured endpoint and warns when `max_tokens` exceeds the reported context window (see Decision 5). That check exists precisely because the runtime symptom — a silent retry loop, then failure minutes later — is so hard to diagnose.
+
+### Implementation note
+
+`max_tokens` is **not a declared field** on NAT's `OpenAIModelConfig`. It reaches the client through Pydantic's `extra="allow"`, landing in `model_extra`. Verified identical on nvidia-nat-core 1.7.0 and 1.8.0. If a future NAT release tightens that class to `extra="forbid"`, every role here fails config-load at once — so re-run this check on each NAT upgrade:
+
+```bash
+python -c "from nat.llm.openai_llm import OpenAIModelConfig as C; print(C.model_config, sorted(C.model_fields))"
+```
 
 
 ## Decision 7: Tavily Search Error Logging

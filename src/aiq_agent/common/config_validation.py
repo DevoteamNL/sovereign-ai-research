@@ -302,7 +302,17 @@ async def validate_llm_endpoints(config: dict[str, Any]) -> list[str]:
             continue
         fn_type = fn_config.get("_type", "")
         if fn_type == "deep_research_agent":
-            for role_key in ("orchestrator_llm", "researcher_llm", "planner_llm"):
+            # writer_llm and source_router_llm are checked too: the writer produces the
+            # final report (the largest single generation in a deep-research run) and
+            # both carry their own max_tokens, so both can exceed the context window
+            # independently of the orchestrator.
+            for role_key in (
+                "orchestrator_llm",
+                "researcher_llm",
+                "planner_llm",
+                "writer_llm",
+                "source_router_llm",
+            ):
                 ref = fn_config.get(role_key)
                 if ref:
                     deep_research_roles.add(ref)

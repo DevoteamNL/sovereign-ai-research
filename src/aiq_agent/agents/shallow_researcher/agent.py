@@ -395,10 +395,9 @@ class ShallowResearcherAgent:
                     )
                     raise EmptySourceRegistryError(
                         "shallow research",
-                        had_model_response=bool(content.strip()),
-                        tool_errors=tool_errors,
                         unavailable_tools=unavailable,
                         available_count=available_count,
+                        tool_errors=tool_errors,
                     )
 
                 # Step 2: sanitize report (strip body URLs, shortened URLs, unsafe URLs)

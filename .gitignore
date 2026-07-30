@@ -42,6 +42,8 @@ env/
 .env.*.local
 .env.*-backup
 .env.*.backup
+.env.bak*
+.env.*.bak*
 # Logs
 *.log
 logs/
@@ -99,3 +101,7 @@ docs/notebooks/config_*.yml
 # Local images (not committed) for notebooks
 docs/notebooks/local_assets/
 /config_*.yml
+
+# Local working docs (not committed) - upstream catch-up runbook, blog drafts
+/upstream-merge-plan-v2.2.0.md
+/docs/blog/
