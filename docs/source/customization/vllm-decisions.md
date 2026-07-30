@@ -96,17 +96,45 @@ The original config validation assumed local endpoints don't need API keys (base
 **Bug found:** The original `_extract_env_var` regex matched the full `VAR:-default` string as the variable name, causing `os.getenv("VLLM_API_KEY:-no-key")` which always returned None. Fixed by splitting the regex into name and default capture groups.
 
 
-## Decision 6: Configurable max_tokens for Orchestrator
+## Decision 6: Configurable max_tokens per LLM role
 
-**Decision:** Make `max_tokens` for the deep research orchestrator configurable via `VLLM_ORCHESTRATOR_MAX_TOKENS` environment variable.
+**Decision:** Keep the committed `max_tokens` defaults at **NIM scale**, and make every role overridable by environment variable — `VLLM_INTENT_MAX_TOKENS`, `VLLM_RESEARCHER_MAX_TOKENS`, `VLLM_ORCHESTRATOR_MAX_TOKENS`, `VLLM_WRITER_MAX_TOKENS`.
 
-**Why:**
-- The NIM config uses `max_tokens: 128000` for GPT-OSS-120B, which has a 256k context window
-- Smaller models on MaaS endpoints often have 16k-40k context windows
-- Hardcoding `max_tokens` in the config means every MaaS deployment requires editing the YAML
-- Making it an env var follows the same pattern as other vLLM config values
+**Default:** orchestrator `128000`, researcher `16384`, writer `16384`, intent `1024`. These match the NIM configuration deliberately — see the sizing note below before lowering them.
 
-**Default:** 128000 (matches the NIM config for large models). MaaS users override it based on their model's context window.
+**Why match NIM scale rather than pick a "safe" small default:**
+
+vLLM-hosted is **not** a synonym for small. On Red Hat AI (OpenShift AI / KServe), we deploy Nemotron-3-scale models — Super `120b-a12b`, Ultra `550b-a55b` — through vLLM just as readily as through NIM. The serving stack is an operational choice, not a capability tier. A default tuned for a 16k MaaS endpoint would silently truncate deep-research synthesis on exactly the large-context deployments this configuration is built for.
+
+So the committed defaults assume a capable endpoint, and operators scale *down* for constrained ones.
+
+### The hard constraint: `max_tokens` must be ≤ the served `--max-model-len`
+
+This is a coupling between this configuration and how the endpoint is launched, and vLLM enforces it with an **HTTP 400**. It is not model-dependent — it depends entirely on what `--max-model-len` the server was started with.
+
+Two real incidents:
+
+1. **Red Hat MaaS, `qwen3-14b`, 40k context.** Deep research failed with `400 Bad Request`. The failure surfaced only after minutes of research, once report generation had accumulated enough context to cross the limit.
+2. **DGX Spark, Nemotron-3-Super.** A KV-cache fix reduced `--max-model-len` from 262144 to 32768 to buy concurrency (KV cache 7.62 → 23.29 GiB, concurrency 1.25x → 30.54x). The *model* was large, but the *served window* was now 32k — so `max_tokens: 128000` was rejected. Resolved with `VLLM_ORCHESTRATOR_MAX_TOKENS=8192`.
+
+The second case is the important one: **a large model does not guarantee a large served window.** Serving-side tuning for throughput routinely shrinks `--max-model-len` well below what the model supports.
+
+### Sizing guidance for vLLM-hosted setups
+
+1. Read the server's actual window — `curl $VLLM_BASE_URL/v1/models` reports `max_model_len`, and it is logged at vLLM startup.
+2. Keep every role's `max_tokens` **strictly below** it, leaving headroom for the prompt. The value is an *output* budget, but the server rejects requests where prompt + `max_tokens` exceeds the window.
+3. On reasoning models (Nemotron, Qwen3.5, Kimi K2.5), hidden reasoning tokens count toward the budget — allow 2-3x the expected content length.
+4. Override per role via env; do not edit the committed YAML.
+
+Startup validation catches this before any user query: `validate_llm_endpoints` probes each configured endpoint and warns when `max_tokens` exceeds the reported context window (see Decision 5). That check exists precisely because the runtime symptom — a silent retry loop, then failure minutes later — is so hard to diagnose.
+
+### Implementation note
+
+`max_tokens` is **not a declared field** on NAT's `OpenAIModelConfig`. It reaches the client through Pydantic's `extra="allow"`, landing in `model_extra`. Verified identical on nvidia-nat-core 1.7.0 and 1.8.0. If a future NAT release tightens that class to `extra="forbid"`, every role here fails config-load at once — so re-run this check on each NAT upgrade:
+
+```bash
+python -c "from nat.llm.openai_llm import OpenAIModelConfig as C; print(C.model_config, sorted(C.model_fields))"
+```
 
 
 ## Decision 7: Tavily Search Error Logging
