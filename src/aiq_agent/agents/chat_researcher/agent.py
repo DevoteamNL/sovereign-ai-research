@@ -202,43 +202,9 @@ class ChatResearcherAgent:
                     available_documents=state.available_documents,
                 )
                 result = await self.shallow_research_fn(shallow_state)
-            except EmptySourceRegistryError as source_err:
-                logger.warning(
-                    "Shallow research produced no verifiable sources "
-                    "(had_model_response=%s, tool_errors=%d, unavailable_tools=%d)",
-                    source_err.had_model_response,
-                    len(source_err.tool_errors),
-                    len(source_err.unavailable_tools),
-                )
-                if source_err.tool_errors:
-                    # Tools were called but returned errors (API quota, network, etc.)
-                    err_msg = (
-                        "The search tools encountered errors and could not complete your request. "
-                        "Details: " + "; ".join(source_err.tool_errors[:3]) + ". "
-                        "This may be due to an API quota limit, a temporary service outage, "
-                        "or a misconfigured API key. Please check your API keys and try again later."
-                    )
-                elif source_err.unavailable_tools:
-                    from aiq_agent.common.tool_validation import format_user_facing_tool_error
-
-                    err_msg = format_user_facing_tool_error(
-                        "shallow research",
-                        source_err.unavailable_tools,
-                        source_err.available_count,
-                    )
-                elif source_err.had_model_response:
-                    err_msg = (
-                        "Citation verification rejected the response because the model answered "
-                        "from memory without consulting search tools. All citations were unverifiable. "
-                        "This is a safety measure to prevent inaccurate information. "
-                        "Please try rephrasing your question or selecting different data sources."
-                    )
-                else:
-                    err_msg = (
-                        "The search tools did not return any results for this question. "
-                        "This may be due to a temporary issue or the question may need to be rephrased. "
-                        "Please try again."
-                    )
+            except EmptySourceRegistryError as exc:
+                logger.warning("Shallow research produced no verifiable sources")
+                err_msg = exc.public_response
                 # confidence="high" reflects certainty that an error occurred and that the error
                 # message is the correct response — not uncertainty about the answer quality.
                 # escalate_to_deep=False because retrying deep research will not resolve a
@@ -314,42 +280,9 @@ class ChatResearcherAgent:
             )
             try:
                 result = await self.deep_research_fn(deep_state)
-            except EmptySourceRegistryError as source_err:
-                logger.warning(
-                    "Deep research produced no verifiable sources "
-                    "(had_model_response=%s, tool_errors=%d, unavailable_tools=%d)",
-                    source_err.had_model_response,
-                    len(source_err.tool_errors),
-                    len(source_err.unavailable_tools),
-                )
-                if source_err.tool_errors:
-                    err_msg = (
-                        "The search tools encountered errors during deep research. "
-                        "Details: " + "; ".join(source_err.tool_errors[:3]) + ". "
-                        "This may be due to an API quota limit, a temporary service outage, "
-                        "or a misconfigured API key. Please check your API keys and try again later."
-                    )
-                elif source_err.unavailable_tools:
-                    from aiq_agent.common.tool_validation import format_user_facing_tool_error
-
-                    err_msg = format_user_facing_tool_error(
-                        "deep research",
-                        source_err.unavailable_tools,
-                        source_err.available_count,
-                    )
-                elif source_err.had_model_response:
-                    err_msg = (
-                        "Citation verification rejected the deep research report because it contained "
-                        "unverifiable sources. The model may have generated citations from memory "
-                        "instead of real search results. This is a safety measure to prevent "
-                        "inaccurate information. Please try rephrasing your question."
-                    )
-                else:
-                    err_msg = (
-                        "The search tools did not return any results for this question. "
-                        "This may be due to a temporary issue or the question may need to be rephrased. "
-                        "Please try again."
-                    )
+            except EmptySourceRegistryError as exc:
+                logger.warning("Deep research produced no verifiable sources")
+                err_msg = exc.public_response
                 return {"messages": [AIMessage(content=err_msg)]}
             except Exception as e:
                 if _AuthError and isinstance(e, _AuthError):

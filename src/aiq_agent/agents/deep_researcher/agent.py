@@ -258,8 +258,8 @@ class DeepResearcherAgent:
                 )
                 raise EmptySourceRegistryError(
                     "deep research",
-                    unavailable_tools=unavailable,
-                    available_count=available_count,
+                    unavailable,
+                    available_count,
                 )
 
             # Post-process: sanitize report (strip body URLs, shortened URLs, unsafe URLs)

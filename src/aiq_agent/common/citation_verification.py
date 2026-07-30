@@ -74,49 +74,65 @@ class CitationVerificationResult:
 class EmptySourceRegistryError(Exception):
     """Raised when no sources were captured during research.
 
+    The positional parameters and the ``public_response`` property intentionally
+    mirror the AI-Q 2.2 upstream shape so the v2.2.0 catch-up merges cleanly.
+    ``tool_errors`` is Red Hat-only and is therefore keyword-only and trailing:
+    upstream's positional call sites keep working, and upstream's future
+    ``reason`` / ``generated_answer`` parameters can be inserted ahead of it
+    without breaking ours.
+
     Attributes:
         agent_type: The research agent that raised the error (e.g., "shallow research").
-        had_model_response: True if the model generated a response but without calling
-            tools — indicates the model hallucinated citations from parametric memory
-            instead of using search tools.
-        tool_errors: List of error messages from failed tool calls, if any. When
-            populated, indicates tools were invoked but returned errors (e.g., API
-            quota exhausted) rather than the model ignoring tools entirely.
         unavailable_tools: List of tool names registered as stubs because their
-            pre-flight checks failed (e.g., missing API keys). Surfaced upstream by
-            #184 for actionable configuration guidance.
+            pre-flight checks failed (e.g., missing API keys).
         available_count: Number of tools that passed pre-flight and could have run.
+        tool_errors: (Red Hat) Error messages from failed tool calls. When populated,
+            tools were invoked but returned errors (e.g. API quota exhausted) rather
+            than the model ignoring tools entirely. This is the only signal that
+            separates "the endpoint is down" from "there were no results", which is
+            the distinction that matters most on self-hosted vLLM deployments.
     """
 
     def __init__(
         self,
         agent_type: str = "research",
-        *,
-        had_model_response: bool = False,
-        tool_errors: list[str] | None = None,
         unavailable_tools: list[str] | None = None,
         available_count: int = 0,
+        *,
+        tool_errors: list[str] | None = None,
     ) -> None:
         self.agent_type = agent_type
-        self.had_model_response = had_model_response
-        self.tool_errors = tool_errors or []
         self.unavailable_tools = unavailable_tools or []
         self.available_count = available_count
+        self.tool_errors = tool_errors or []
+        super().__init__(
+            f"Research failed: no sources were captured during {agent_type}. "
+            "All tool calls may have failed or returned no results."
+        )
+
+    @property
+    def public_response(self) -> str:
+        """Return a message safe to display directly to the user."""
         if self.tool_errors:
-            detail = f"Research tools failed during {agent_type}: " + "; ".join(self.tool_errors)
-        elif had_model_response:
-            detail = (
-                f"Citation verification rejected the {agent_type} response: the model "
-                "generated an answer without using search tools, so citations could not "
-                "be verified against real sources."
+            return (
+                "The search tools encountered errors and could not complete your request. "
+                "Details: " + "; ".join(self.tool_errors[:3]) + ". "
+                "This may be due to an API quota limit, a temporary service outage, "
+                "or a misconfigured API key. Please check your API keys and try again later."
             )
-        else:
-            detail = (
-                f"Research failed: no sources were captured during {agent_type}. "
-                "All tool calls may have failed or returned no results. "
-                "Please try again."
+        if self.unavailable_tools:
+            from aiq_agent.common.tool_validation import format_user_facing_tool_error
+
+            return format_user_facing_tool_error(
+                self.agent_type,
+                self.unavailable_tools,
+                self.available_count,
             )
-        super().__init__(detail)
+        return (
+            "The search tools did not return any results for this question. "
+            "This may be due to a temporary issue or the question may need to be rephrased. "
+            "Please try again."
+        )
 
 
 _TRACKING_PARAMS = frozenset(
