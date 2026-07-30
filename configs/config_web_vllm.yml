@@ -77,7 +77,13 @@ llms:
     api_key: ${VLLM_API_KEY:-no-key}
     temperature: 0.5
     top_p: 0.9
-    max_tokens: ${VLLM_INTENT_MAX_TOKENS:-1024}
+    # 4096 matches every NIM config. Do NOT lower this: on a truncated response
+    # vLLM returns content=None with finish_reason="length" and no error, and the
+    # intent classifier silently defaults to SHALLOW research with no log line
+    # (chat_researcher/nodes/intent_classifier.py). Deep research then never
+    # triggers and the logs look clean. Reasoning models spend part of this budget
+    # on hidden reasoning tokens before emitting any JSON.
+    max_tokens: ${VLLM_INTENT_MAX_TOKENS:-4096}
     # Reasoning control. Default null = no directive, which is safe on ANY model.
     # VLLM_THINKING=false injects /no_think (Nemotron only — NAT's GatedFieldMixin
     # raises on other models). Provided as an escape hatch, NOT a performance fix:
@@ -129,7 +135,11 @@ llms:
     base_url: ${VLLM_BASE_URL:-http://localhost:8000}/v1
     api_key: ${VLLM_API_KEY:-no-key}
     temperature: 0.3
-    max_tokens: 100
+    # Env-overridable, unlike the NIM configs' hardcoded 100: VLLM_SUMMARY_MODEL is
+    # operator-supplied and may be the same reasoning endpoint as every other role,
+    # where 100 tokens is consumed before any content is emitted. A truncated
+    # summary is stored silently as an empty string.
+    max_tokens: ${VLLM_SUMMARY_MAX_TOKENS:-512}
     thinking: ${VLLM_THINKING:-null}
 
 functions:
