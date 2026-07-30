@@ -37,7 +37,7 @@ Common issues and solutions for the AI-Q blueprint.
 | Clarifier keeps asking questions | Too many clarification turns | Reduce `max_turns` or set `enable_plan_approval: false` |
 | SSE stream disconnects | Network timeout | Client auto-reconnects using `last_event_id`; refer to [Data Flow](../architecture/data-flow.md) |
 | Job status stuck on RUNNING | Dask worker crashed | Check Dask logs; the ghost job reaper will eventually mark it FAILURE |
-| `/think` or `/no_think` in output | Nemotron on vLLM with NIM-specific directives | Update codebase — `get_thinking_prefix()` now checks backend type. Ensure config uses `_type: openai` for vLLM, not `_type: nim`. Remove any `chat_template_kwargs` from vLLM configs. See [Thinking Prefixes](../customization/vllm-migration.md#model-aware-thinking-prefixes) |
+| `/think` or `/no_think` in output | vLLM served without a `--reasoning-parser`, so the directive is not consumed | Configure a reasoning parser on the vLLM server. Use the `thinking:` config field rather than prompt text; ensure `_type: openai` for vLLM, not `_type: nim`, and remove any `chat_template_kwargs`. See [Reasoning Control](../customization/vllm-migration.md#reasoning-control-thinking) |
 | `<think>...</think>` blocks in output | Reasoning model producing visible thinking tokens | For vLLM: start with `--reasoning-parser deepseek_r1`. For NIM: check `enable_thinking` in `chat_template_kwargs` |
 
 ## Nemotron Super — Build Endpoint Availability

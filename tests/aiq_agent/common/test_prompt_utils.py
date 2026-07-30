@@ -17,14 +17,10 @@
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import MagicMock
 
 import pytest
 
 from aiq_agent.common.prompt_utils import PromptError
-from aiq_agent.common.prompt_utils import _get_model_name
-from aiq_agent.common.prompt_utils import get_thinking_prefix
-from aiq_agent.common.prompt_utils import is_nemotron
 from aiq_agent.common.prompt_utils import load_prompt
 from aiq_agent.common.prompt_utils import render_prompt_template
 
@@ -206,132 +202,3 @@ Description: {{ step.description }}
         assert "Step 1: Literature Review" in result
         assert "Step 2: Data Collection" in result
         assert "Handle with care" in result
-
-
-# -------------------------------------------------------------------------
-# Tests for model-aware thinking helpers
-# -------------------------------------------------------------------------
-
-
-def _make_mock_llm(model_name: str, *, nim: bool = False):
-    """Create a mock LLM with the given model_name attribute.
-
-    Args:
-        model_name: Model name string.
-        nim: If True, mock as a ChatNVIDIA instance (NIM endpoint).
-    """
-    if nim:
-        from langchain_nvidia_ai_endpoints import ChatNVIDIA
-
-        llm = MagicMock(spec=ChatNVIDIA)
-    else:
-        llm = MagicMock()
-    llm.model_name = model_name
-    return llm
-
-
-class TestGetModelName:
-    """Tests for _get_model_name()."""
-
-    def test_model_name_attribute(self):
-        llm = _make_mock_llm("nvidia/llama-nemotron-70b")
-        assert _get_model_name(llm) == "nvidia/llama-nemotron-70b"
-
-    def test_model_attribute_fallback(self):
-        llm = MagicMock(spec=[])
-        llm.model = "gpt-4o"
-        assert _get_model_name(llm) == "gpt-4o"
-
-    def test_no_model_attribute(self):
-        llm = MagicMock(spec=[])
-        assert _get_model_name(llm) == ""
-
-
-class TestIsNemotron:
-    """Tests for is_nemotron()."""
-
-    @pytest.mark.parametrize(
-        "model_name",
-        [
-            "nvidia/llama-3.3-nemotron-super-49b-v1",
-            "nvidia/llama-3.1-nemotron-70b-instruct",
-            "nvidia/nvidia-nemotron-3-nano-30b-a3b",
-            "nvidia/llama-nemotron-mini-4b-instruct",
-            # vLLM --served-model-name variants (no HF org prefix after nvidia/)
-            "nvidia/nemotron-3-nano-30b-a3b",
-            "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
-        ],
-    )
-    def test_nemotron_on_nim_detected(self, model_name):
-        assert is_nemotron(_make_mock_llm(model_name, nim=True)) is True
-
-    @pytest.mark.parametrize(
-        "model_name",
-        [
-            "nvidia/llama-3.3-nemotron-super-49b-v1",
-            "nvidia/nvidia-nemotron-3-nano-30b-a3b",
-        ],
-    )
-    def test_nemotron_on_vllm_not_detected(self, model_name):
-        """Nemotron on vLLM (non-NIM) should NOT get /think directives."""
-        assert is_nemotron(_make_mock_llm(model_name, nim=False)) is False
-
-    @pytest.mark.parametrize(
-        "model_name",
-        [
-            "meta-llama/Llama-3.1-70B-Instruct",
-            "Qwen/Qwen2.5-72B-Instruct",
-            "gpt-4o",
-            "openai/gpt-oss-120b",
-            "anthropic/claude-3-opus",
-            "deepseek-ai/DeepSeek-R1",
-            "mistralai/Mixtral-8x7B-Instruct",
-            "",
-        ],
-    )
-    def test_non_nemotron_models_not_detected(self, model_name):
-        assert is_nemotron(_make_mock_llm(model_name)) is False
-
-
-class TestGetThinkingPrefix:
-    """Tests for get_thinking_prefix()."""
-
-    def test_nemotron_nim_disable_thinking(self):
-        llm = _make_mock_llm("nvidia/llama-3.3-nemotron-super-49b-v1", nim=True)
-        assert get_thinking_prefix(llm, enable=False) == "/no_think\n\n"
-
-    def test_nemotron_nim_enable_thinking(self):
-        llm = _make_mock_llm("nvidia/llama-3.3-nemotron-super-49b-v1", nim=True)
-        assert get_thinking_prefix(llm, enable=True) == "/think\n\n"
-
-    def test_nemotron_vllm_returns_empty(self):
-        """Nemotron on vLLM should NOT get /think directives."""
-        llm = _make_mock_llm("nvidia/llama-3.3-nemotron-super-49b-v1", nim=False)
-        assert get_thinking_prefix(llm, enable=False) == ""
-        assert get_thinking_prefix(llm, enable=True) == ""
-
-    def test_non_nemotron_disable_returns_empty(self):
-        llm = _make_mock_llm("meta-llama/Llama-3.1-70B-Instruct")
-        assert get_thinking_prefix(llm, enable=False) == ""
-
-    def test_non_nemotron_enable_returns_empty(self):
-        llm = _make_mock_llm("meta-llama/Llama-3.1-70B-Instruct")
-        assert get_thinking_prefix(llm, enable=True) == ""
-
-    def test_default_enable_is_false(self):
-        llm = _make_mock_llm("nvidia/llama-3.3-nemotron-super-49b-v1", nim=True)
-        # enable defaults to False
-        assert get_thinking_prefix(llm) == "/no_think\n\n"
-
-    def test_prefix_can_be_prepended_to_prompt(self):
-        """Integration-style test: prefix + rendered prompt produces correct output."""
-        nemotron = _make_mock_llm("nvidia/nvidia-nemotron-3-nano-30b-a3b", nim=True)
-        vllm = _make_mock_llm("Qwen/Qwen2.5-72B-Instruct")
-
-        prompt = "You are an assistant."
-
-        nemotron_result = get_thinking_prefix(nemotron, enable=False) + prompt
-        assert nemotron_result == "/no_think\n\nYou are an assistant."
-
-        vllm_result = get_thinking_prefix(vllm, enable=False) + prompt
-        assert vllm_result == "You are an assistant."

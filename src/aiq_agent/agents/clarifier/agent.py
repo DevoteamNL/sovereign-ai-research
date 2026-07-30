@@ -60,7 +60,6 @@ from langgraph.prebuilt import ToolNode
 from aiq_agent.common import LLMProvider
 from aiq_agent.common import LLMRole
 from aiq_agent.common import get_latest_user_query
-from aiq_agent.common import get_thinking_prefix
 from aiq_agent.common import load_prompt
 from aiq_agent.common import render_prompt_template
 
@@ -532,8 +531,7 @@ class ClarifierAgent:
             tools_info = [
                 {"name": getattr(t, "name", ""), "description": getattr(t, "description", "")} for t in self.tools
             ]
-            thinking_prefix = get_thinking_prefix(self._get_llm(), enable=False)
-            rendered_system_prompt = thinking_prefix + render_prompt_template(
+            rendered_system_prompt = render_prompt_template(
                 self.system_prompt,
                 clarifier_result=state.clarifier_log,
                 available_documents=state.available_documents or [],
@@ -623,10 +621,8 @@ class ClarifierAgent:
             title: str = "Research Report"
             sections: list[str] = ["Introduction", "Background", "Analysis", "Findings", "Conclusion"]
 
-            plan_thinking_prefix = get_thinking_prefix(planner_llm, enable=False)
-
             for iteration in range(self.max_plan_iterations):
-                rendered_prompt = plan_thinking_prefix + render_prompt_template(
+                rendered_prompt = render_prompt_template(
                     self.plan_generation_prompt,
                     clarifier_context=clarifier_log,
                     feedback_history=feedback_history if feedback_history else None,

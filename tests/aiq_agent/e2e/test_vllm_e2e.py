@@ -95,6 +95,26 @@ class TestVLLMChatCompletion:
         r = httpx.get(f"{VLLM_BASE_URL}/v1/models", timeout=10)
         return r.json()["data"][0]["id"]
 
+    # NOTE on max_tokens in this class: vLLM returns ``content: None`` with
+    # ``finish_reason: "length"`` when generation is truncated -- no error, just a
+    # silent null. Every request below therefore budgets well above the measured
+    # need, and asserts on finish_reason so a truncation fails loudly instead of
+    # blowing up on ``len(None)``. Measured against
+    # nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 (2026-07-30, 3 runs each):
+    # no directive ~49 completion tokens, /no_think ~49, /think ~465.
+
+    @staticmethod
+    def _content(response: httpx.Response) -> str:
+        """Return message content, failing clearly on truncation rather than on None."""
+        choice = response.json()["choices"][0]
+        assert choice["finish_reason"] != "length", (
+            f"response truncated (finish_reason=length); raise max_tokens. "
+            f"completion_tokens={response.json()['usage']['completion_tokens']}"
+        )
+        content = choice["message"]["content"]
+        assert content is not None, f"content was None with finish_reason={choice['finish_reason']}"
+        return content
+
     def test_simple_completion(self):
         """A basic chat completion returns a non-empty response."""
         model = self._get_model_name()
@@ -103,19 +123,18 @@ class TestVLLMChatCompletion:
             json={
                 "model": model,
                 "messages": [{"role": "user", "content": "Say hello in exactly three words."}],
-                "max_tokens": 50,
+                # ~49 tokens measured; 512 leaves generous headroom.
+                "max_tokens": 512,
                 "temperature": 0.1,
             },
-            timeout=60,
+            timeout=120,
         )
         assert r.status_code == 200
-        data = r.json()
-        content = data["choices"][0]["message"]["content"]
-        assert len(content) > 0
-        assert data["usage"]["completion_tokens"] > 0
+        assert len(self._content(r)) > 0
+        assert r.json()["usage"]["completion_tokens"] > 0
 
     def test_no_think_prefix_suppresses_thinking(self):
-        """Nemotron /no_think prefix should suppress <think> reasoning tokens."""
+        """/no_think is accepted cleanly and does not increase token usage."""
         model = self._get_model_name()
         r = httpx.post(
             f"{VLLM_BASE_URL}/v1/chat/completions",
@@ -125,22 +144,23 @@ class TestVLLMChatCompletion:
                     {"role": "system", "content": "/no_think"},
                     {"role": "user", "content": "What is 2+2? One word answer."},
                 ],
-                "max_tokens": 50,
+                "max_tokens": 512,
                 "temperature": 0.1,
             },
-            timeout=60,
+            timeout=120,
         )
         assert r.status_code == 200
-        content = r.json()["choices"][0]["message"]["content"]
-        # NOTE: On the stock NGC vLLM image (v0.13.0), /no_think does not reliably
-        # suppress thinking tokens for Nemotron-3-Nano via the chat completions API.
-        # The thinking content appears inline in the response. This is a known vLLM
-        # limitation — the reasoning_parser plugin is needed for clean separation.
-        # We verify the response is valid and document the behavior.
+        content = self._content(r)
+        # vLLM with a reasoning parser CONSUMES the directive -- it is not echoed
+        # as literal text (an earlier assumption in prompt_utils.is_nemotron).
+        assert "/no_think" not in content, "directive echoed into content"
+        # Measured: /no_think costs the same as no directive (~49 tokens both), because
+        # this build does not emit a reasoning trace by default. Suppression is a no-op
+        # here, NOT a latency fix -- see docs/source/customization/vllm-results.md.
         assert len(content) > 0, "Empty response with /no_think prefix"
 
     def test_think_prefix_enables_reasoning(self):
-        """Nemotron /think prefix should produce <think> reasoning tokens."""
+        """/think enables reasoning and materially increases token usage."""
         model = self._get_model_name()
         r = httpx.post(
             f"{VLLM_BASE_URL}/v1/chat/completions",
@@ -150,14 +170,16 @@ class TestVLLMChatCompletion:
                     {"role": "system", "content": "/think"},
                     {"role": "user", "content": "What is the square root of 144?"},
                 ],
-                "max_tokens": 200,
+                # ~465 tokens measured with /think (~9.5x the ~49 without it).
+                # The previous value of 200 truncated every run.
+                "max_tokens": 1024,
                 "temperature": 0.1,
             },
-            timeout=60,
+            timeout=300,
         )
         assert r.status_code == 200
-        content = r.json()["choices"][0]["message"]["content"]
-        # With /think, the model should include reasoning
+        content = self._content(r)
+        assert "/think" not in content, "directive echoed into content"
         assert len(content) > 10
 
     def test_max_tokens_respected(self):
@@ -353,41 +375,54 @@ class TestEndpointProbing:
 
 
 # ===========================================================================
-# 7. Thinking prefix integration
+# 7. LLM config contract (NAT OpenAIModelConfig)
 # ===========================================================================
 
 
-@requires_vllm
-class TestThinkingPrefixIntegration:
-    """Verify the prompt_utils thinking prefix logic works against real Nemotron."""
+class TestOpenAIModelConfigContract:
+    """Guard the two NAT config behaviours the vLLM path depends on.
 
-    def _make_mock_llm(self, model_name: str):
-        """Create a minimal mock LLM with the given model_name attribute."""
-        from unittest.mock import MagicMock
+    Reasoning control is handled by NAT's ``ThinkingMixin`` (the ``thinking:``
+    field in configs/config_web_vllm.yml), not by a local helper. The former RH
+    ``is_nemotron``/``get_thinking_prefix`` pair was removed because it gated the
+    directive on NIM-only endpoints, on the premise that vLLM echoes ``/think``
+    as literal text. That premise is false -- vLLM with a reasoning parser
+    consumes the directive cleanly (see TestVLLMChatCompletion) -- and what it
+    gated is a no-op anyway: measured 2026-07-30, ``/no_think`` costs the same
+    ~49 completion tokens as no directive at all.
+    """
 
-        mock = MagicMock()
-        mock.model_name = model_name
-        return mock
+    def test_max_tokens_passes_through_as_extra(self):
+        """max_tokens is UNDECLARED on OpenAIModelConfig and survives only on extra='allow'.
 
-    def test_is_nemotron_detects_served_model(self):
-        """is_nemotron returns True for the served Nemotron model name."""
-        from aiq_agent.common.prompt_utils import is_nemotron
+        Every LLM role in config_web_vllm.yml sets max_tokens. If a future NAT
+        release tightens this class to extra='forbid', all of them fail config
+        load at once -- upstream did exactly that to DeepResearchAgentConfig in
+        AI-Q 2.2. See docs/source/customization/vllm-decisions.md (Decision 6).
+        """
+        from nat.llm.openai_llm import OpenAIModelConfig
 
-        r = httpx.get(f"{VLLM_BASE_URL}/v1/models", timeout=10)
-        model_id = r.json()["data"][0]["id"]
-        if "nemotron" in model_id.lower():
-            mock_llm = self._make_mock_llm(model_id)
-            assert is_nemotron(mock_llm), f"is_nemotron failed for {model_id}"
+        assert OpenAIModelConfig.model_config.get("extra") == "allow", (
+            "OpenAIModelConfig is no longer extra='allow'; max_tokens will no longer "
+            "pass through and every role in config_web_vllm.yml breaks."
+        )
+        assert "max_tokens" not in OpenAIModelConfig.model_fields, (
+            "max_tokens became a declared field -- update the sizing docs."
+        )
+        cfg = OpenAIModelConfig(model_name="nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4", max_tokens=8192)
+        assert (cfg.model_extra or {}).get("max_tokens") == 8192
 
-    def test_get_thinking_prefix_for_nemotron(self):
-        """get_thinking_prefix returns /no_think for Nemotron models."""
-        from aiq_agent.common.prompt_utils import get_thinking_prefix
+    def test_thinking_field_is_available_and_nemotron_gated(self):
+        """ThinkingMixin supplies `thinking`, gated to Nemotron model names."""
+        from nat.llm.openai_llm import OpenAIModelConfig
 
-        r = httpx.get(f"{VLLM_BASE_URL}/v1/models", timeout=10)
-        model_id = r.json()["data"][0]["id"]
-        if "nemotron" in model_id.lower():
-            mock_llm = self._make_mock_llm(model_id)
-            prefix = get_thinking_prefix(mock_llm, enable=False)
-            assert "/no_think" in prefix, f"Expected /no_think, got: {prefix}"
-            prefix_on = get_thinking_prefix(mock_llm, enable=True)
-            assert "/think" in prefix_on, f"Expected /think, got: {prefix_on}"
+        assert "thinking" in OpenAIModelConfig.model_fields
+
+        # Default (unset) is safe on any model -- this is why the config ships
+        # `thinking: ${VLLM_THINKING:-null}`.
+        assert OpenAIModelConfig(model_name="Qwen/Qwen2.5-72B-Instruct").thinking is None
+
+        # Setting it on a non-Nemotron model is a hard config-load error, so
+        # VLLM_THINKING=false against a non-Nemotron default is a footgun.
+        with pytest.raises(Exception, match="thinking"):
+            OpenAIModelConfig(model_name="Qwen/Qwen2.5-72B-Instruct", thinking=False)

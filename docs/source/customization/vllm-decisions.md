@@ -45,20 +45,30 @@ AI-Q Blueprint v2.0 was originally built exclusively for NVIDIA NIM endpoints (`
 | `VLLM_ORCHESTRATOR_MAX_TOKENS` | `128000` | Max tokens for orchestrator |
 
 
-## Decision 3: Model-Aware Thinking Prefixes
+## Decision 3: Reasoning control via NAT's `thinking:` field (superseded)
 
-**Decision:** Instead of blanket-removing NIM thinking directives (`/think`, `/no_think`), make the prefix system model-aware so it only emits directives for models that understand them.
+**Current decision:** Reasoning control is configuration, handled by NAT's `ThinkingMixin` — the `thinking:` field on each LLM role in `config_web_vllm.yml`. There is no local helper.
 
-**Why:**
-- Nemotron models use `/no_think` and `/think` as performance optimization directives
-- These tokens are meaningless noise to Llama, Qwen, and other models — they can confuse the model or leak into output
-- Blanket removal would break Nemotron when mixing providers in the same config
+**Superseded (2026-07-30):** this project previously carried `is_nemotron()` / `get_thinking_prefix()` in `prompt_utils.py`, which prepended `/think` or `/no_think` to system prompts. **Both were removed**, along with their tests and three call sites. Two measurements drove that:
 
-**Implementation:** `get_thinking_prefix(llm, enable)` in `prompt_utils.py` inspects the LLM's model name:
-- Nemotron → returns `/no_think\n\n` or `/think\n\n`
-- All other models → returns `""` (empty string)
+1. **The premise was wrong.** The helper gated directives to NIM endpoints only, documented as *"vLLM serves the same models but does not interpret /think or /no_think directives — they get echoed as literal text."* Not true: vLLM with a reasoning parser consumes the directive cleanly. Sending `/think` to Nemotron-3-Super on vLLM produced ~465 reasoning tokens, and the directive never appeared in the output.
+2. **What it gated is a no-op.** Measured against `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4`, 3 runs each:
 
-**Trade-off:** Requires pattern matching on model names, which could break if Nemotron naming conventions change. Mitigated by keeping the patterns simple and centralized.
+   | Condition | completion tokens (median) |
+   | :-- | :-- |
+   | no directive | 49 |
+   | `/no_think` | 49 |
+   | `/think` | 465 |
+
+   The model does not emit a reasoning trace by default, so *suppressing* reasoning changes nothing. `/think` **enables** it at ~9.5x the tokens. The long-held theory that unsuppressed reasoning was the latency bomb on self-hosted endpoints is disproven — see [vLLM results](vllm-results.md).
+
+Keeping the helper would have meant carrying ~390 lines of fork deviation, plus duplicating a mechanism the framework already provides.
+
+**What to use instead:** set `thinking:` per role. The config ships `thinking: ${VLLM_THINKING:-null}`; `null` means no directive and is safe on any model.
+
+**Footgun:** `ThinkingMixin` is gated to Nemotron model names and **raises at config load** on anything else. `VLLM_THINKING=false` against a non-Nemotron model (including this config's default `Qwen/Qwen2.5-72B-Instruct` orchestrator) fails startup rather than degrading quietly. Leave it `null` unless every role is Nemotron — and note that per the table above, setting it buys nothing measurable.
+
+**Retained from the old approach:** the fallback prompts in `clarifier/agent.py` and `intent_classifier.py` no longer hardcode `/no_think`. Upstream's versions do, which sends a literal Nemotron directive to whatever model is configured. Keeping those prompts model-agnostic is still correct.
 
 
 ## Decision 4: Startup Endpoint Validation
