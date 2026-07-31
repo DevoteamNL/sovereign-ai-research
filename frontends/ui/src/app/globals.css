@@ -110,11 +110,68 @@
   --text-color-accent-blue-subtle: var(--color-green-200);
 }
 
-/* Red Hat font override — applies site-wide over any KUI/NVIDIA Sans declarations */
-html,
-body,
-* {
-  font-family: 'Red Hat Text', 'Red Hat Display', system-ui, sans-serif !important;
+/* =============================================================================
+   Red Hat fonts — self-hosted
+   -----------------------------------------------------------------------------
+   Replaces a blanket `html, body, * { font-family: ... !important }`. That rule
+   was the only thing applying Red Hat fonts, and because it was `!important` on
+   the universal selector it also beat every monospace rule in the stylesheet --
+   it was the sole `!important` font-family in the whole 373KB build. Code blocks,
+   inline code, JSON and tool payloads therefore rendered in a PROPORTIONAL face,
+   destroying column alignment in every research report.
+
+   Setting the Tailwind theme tokens instead fixes that by REMOVING a hack rather
+   than adding one: no `!important`, no universal selector, and `font-mono` works.
+
+   These :root blocks are UNLAYERED and must stay BELOW the @import at the top of
+   this file. Tailwind's own token defaults are also unlayered, so this wins on
+   SOURCE ORDER, not on layering -- moving the imports below here silently reverts
+   it. (KUI's NVIDIA Sans declarations sit inside @layer base and lose to both.)
+
+   Fonts are self-hosted rather than loaded from Google Fonts: they are Red Hat's
+   own OFL-licensed families, and the Google request did not include Red Hat Mono
+   at all, so there was no brand monospace face available. Shipped unmodified --
+   "Red Hat" is a Reserved Font Name under the OFL, so no subsetting. LICENSE
+   ships alongside in public/fonts/.
+   ============================================================================= */
+@font-face {
+  font-family: 'Red Hat Display';
+  src: url('/fonts/RedHatDisplay-VF.woff2') format('woff2-variations');
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Red Hat Text';
+  src: url('/fonts/RedHatText-VF.woff2') format('woff2-variations');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Red Hat Mono';
+  src: url('/fonts/RedHatMono-VF.woff2') format('woff2-variations');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --font-sans: 'Red Hat Text', Arial, Helvetica, sans-serif;
+  --font-mono: 'Red Hat Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: 'Red Hat Display', Arial, Helvetica, sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+}
+
+code, pre, kbd, samp, .font-mono {
+  font-family: var(--font-mono);
 }
 
 /* Custom global styles */
