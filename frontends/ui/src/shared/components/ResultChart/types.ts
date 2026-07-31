@@ -4,7 +4,7 @@
 import { z } from 'zod'
 
 export const CHART_TYPES = ['bar', 'hbar', 'line', 'area', 'grouped-bar', 'delta'] as const
-export const CHART_COLORS = ['green', 'blue', 'amber', 'red', 'neutral'] as const
+export const CHART_COLORS = ['primary', 'secondary', 'tertiary', 'quaternary', 'neutral'] as const
 export const VALUE_FORMATS = ['number', 'compact', 'percent', 'currency'] as const
 export const KPI_TONES = ['default', 'accent', 'warn', 'alarm'] as const
 

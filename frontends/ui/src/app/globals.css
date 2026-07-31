@@ -63,7 +63,7 @@
 }
 
 /* Light theme brand tokens */
-:where(:root, .nv-light) {
+:where(:root, .rh-light, .nv-light) {
   --background-color-interaction-primary-base: var(--color-green-300);
   --background-color-interaction-primary-hover: var(--color-green-400);
   --background-color-interaction-primary-selected: var(--color-green-500);
@@ -73,7 +73,7 @@
 }
 
 /* Dark theme brand tokens */
-.nv-dark {
+:is(.rh-dark, .nv-dark) {
   --background-color-interaction-primary-base: var(--color-green-300);
   --background-color-interaction-primary-hover: var(--color-green-400);
   --background-color-interaction-primary-selected: var(--color-green-500);
@@ -83,7 +83,7 @@
 }
 
 /* Override blue accent (used by "info" banners) to Red Hat red */
-:where(:root, .nv-light) {
+:where(:root, .rh-light, .nv-light) {
   --background-color-accent-blue: var(--color-green-025);
   --background-color-accent-blue-hover: var(--color-green-050);
   --background-color-accent-blue-selected: var(--color-green-100);
@@ -96,7 +96,7 @@
   --text-color-accent-blue-strong: var(--color-green-700);
   --text-color-accent-blue-subtle: var(--color-green-200);
 }
-.nv-dark {
+:is(.rh-dark, .nv-dark) {
   --background-color-accent-blue: var(--color-green-900);
   --background-color-accent-blue-hover: var(--color-green-800);
   --background-color-accent-blue-selected: var(--color-green-700);
@@ -585,4 +585,38 @@ body {
 }
 .result-chart-carousel > .result-chart {
   margin-top: 0;
+}
+
+/* =============================================================================
+   Result chart palette — Red Hat
+   -----------------------------------------------------------------------------
+   Upstream's ResultChart maps series slot 1 to var(--color-brand), which is
+   #EE0000 here. Left alone that collides with its own red slot and makes GAIN
+   and LOSS render identically. These slots are a categorical palette validated
+   with the dataviz skill's checker (lightness band, chroma floor, CVD
+   separation, normal-vision floor, contrast) in BOTH modes -- do not hand-edit
+   a hex without re-running it:
+
+     node scripts/validate_palette.js "<hex,...>" --mode light|dark
+
+   Red Hat red deliberately leads slot 1: brand identity sits on the first
+   series. Dark is a selected set of steps, not an automatic flip.
+   ============================================================================= */
+:where(:root, .rh-light, .nv-light) {
+  --result-chart-1: #EE0000;   /* Red Hat red */
+  --result-chart-2: #2a78d6;   /* blue  */
+  --result-chart-3: #1baf7a;   /* aqua  */
+  --result-chart-4: #eda100;   /* amber */
+  --result-chart-neutral: #595959;
+  --result-chart-gain: #2a78d6;
+  --result-chart-loss: #EE0000;
+}
+:is(.rh-dark, .nv-dark) {
+  --result-chart-1: #EE0000;
+  --result-chart-2: #3987e5;
+  --result-chart-3: #199e70;
+  --result-chart-4: #c98500;
+  --result-chart-neutral: #B8B8B8;
+  --result-chart-gain: #3987e5;
+  --result-chart-loss: #EE0000;
 }
