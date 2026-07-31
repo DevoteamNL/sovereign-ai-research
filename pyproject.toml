@@ -45,16 +45,11 @@ dependencies = [
     "aiofiles>=23.0.0",
     "python-multipart>=0.0.27,<0.1",
     "knowledge-layer[all]",
-    # Minimum version pins to address known vulnerabilities (transitive deps)
-    "langchain-core>=1.2.22",   # CVE: path traversal in legacy load_prompt
-    "langgraph>=1.0.10",        # CVE: unsafe msgpack deserialization in checkpoints
-    "pyasn1>=0.6.3,<0.7",       # CVE: DoS via unbounded recursion (upper bound from upstream)
-    "cryptography>=46.0.6,<47", # CVE: incomplete DNS name constraint enforcement (upper bound from upstream #175)
-    "pypdf>=6.9.2",             # Multiple DoS CVEs (infinite loops, memory exhaustion)
-    # "requests>=2.33.0" — blocked by ragaai-catalyst pinning requests<2.33
-    "pygments>=2.20.0,<3",      # CVE: ReDoS in GUID matching (upper bound from upstream #175)
-    "pillow>=12.2.0,<13",       # CVE-2026-40192 (upstream #183)
-    "nltk>=3.9.4,<4",           # CVE: XSS in NLTK (upper bound from upstream)
+    # CVE version floors for transitive dependencies
+    "mcp>=1.28.1,<2",
+    "pillow>=12.3.0,<13",
+    "pyasn1>=0.6.4,<0.7",
+    "pygments>=2.20.0,<3",
 ]
 
 [project.optional-dependencies]
@@ -210,17 +205,19 @@ prerelease = "if-necessary"
 override-dependencies = [
     "authlib>=1.6.11,<2",
     "cryptography>=46.0.6,<47",
-    "pillow>=12.2.0,<13",
+    "mcp>=1.28.1,<2",
+    "pillow>=12.3.0,<13",
     "pygments>=2.20.0,<3",
     "pyopenssl>=26.0.0,<27",
-    "pytest>=9.0.3",          # CVE floor (captures upstream #192)
+    "setuptools>=83.0.0",
     "tornado>=6.5.5",
     "litellm>=1.83.7,<2",
     "mako>=1.3.12,<2",
     "banks>=2.4.2,<3",
     "lxml>=6.1.0,<7",
-    "nltk>=3.9.4,<4",
-    "pyasn1>=0.6.3,<0.7",
+    "defusedxml>=0.7.1,<0.8",
+    "nltk>=3.10.0,<4",
+    "pyasn1>=0.6.4,<0.7",
 ]
 
 [tool.uv.pip]
