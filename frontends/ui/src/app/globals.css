@@ -620,3 +620,42 @@ body {
   --result-chart-gain: #3987e5;
   --result-chart-loss: #EE0000;
 }
+
+/* Override the teal accent to Red Hat red.
+   KUI's .nv-avatar-root uses --background-color-accent-teal-strong, so the user
+   avatar -- the most persistent element in the app, top-right on every page --
+   rendered #005F5A teal. Verified by sampling the rendered pixel, not by eye.
+   Teal is not a Red Hat UI surface colour (brand teal #0097A7 is reserved for
+   visited links), so the family is remapped the same way accent-blue already is. */
+:where(:root, .rh-light, .nv-light) {
+  --background-color-accent-teal: var(--color-green-025);
+  --background-color-accent-teal-hover: var(--color-green-050);
+  --background-color-accent-teal-selected: var(--color-green-100);
+  --background-color-accent-teal-strong: var(--color-green-300);
+  --background-color-accent-teal-subtle: var(--color-green-100);
+  --background-color-accent-teal-subtle-hover: var(--color-green-200);
+  --background-color-accent-teal-subtle-selected: var(--color-green-600);
+  --border-color-accent-teal: var(--color-green-600);
+  --text-color-accent-teal: var(--color-green-700);
+  --text-color-accent-teal-strong: var(--color-green-700);
+}
+:is(.rh-dark, .nv-dark) {
+  --background-color-accent-teal: var(--color-green-900);
+  --background-color-accent-teal-hover: var(--color-green-800);
+  --background-color-accent-teal-selected: var(--color-green-700);
+  --background-color-accent-teal-strong: var(--color-green-300);
+  --background-color-accent-teal-subtle: var(--color-green-800);
+  --background-color-accent-teal-subtle-hover: var(--color-green-700);
+  --background-color-accent-teal-subtle-selected: var(--color-green-600);
+  --border-color-accent-teal: var(--color-green-300);
+  --text-color-accent-teal: var(--color-green-200);
+  --text-color-accent-teal-strong: var(--color-green-100);
+}
+
+/* KUI never defines --color-border-focus, so every `var(--color-border-focus, ...)`
+   call site was rendering its fallback -- which upstream set to NVIDIA green
+   #76b900 on the keyboard focus ring. Define it so the fallback is dead code. */
+:where(:root, .rh-light, .nv-light),
+:is(.rh-dark, .nv-dark) {
+  --color-border-focus: var(--color-brand);
+}
