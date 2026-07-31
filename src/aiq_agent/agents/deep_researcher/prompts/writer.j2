@@ -30,8 +30,20 @@ Read these inputs before writing:
 - `/shared/plan.json`
 - Every `ResearchNotes` JSON file under `/shared/`, excluding `/shared/plan.json`, `/shared/source_routing.json`, and `/shared/output.md`
 - The compact result of `get_verified_sources`
+{% if parent_report_context_available %}
+- `/shared/original_report.md`
+- `/shared/source_summary.md` when available
+{% endif %}
 
 If an expected research note is missing, name that as a gap in the final answer when it affects the answer.
+
+{% if parent_report_context_available %}
+## Parent Report Delta Mode
+
+Use the parent report as the base document. Preserve supported parent-report material where it still applies, merge in the new delta evidence, and produce a complete standalone revised report.
+
+Do not return a research plan, insertion plan, patch, diff, commentary, or explanation of how to rewrite the report.
+{% endif %}
 
 ## Synthesis Contract
 - Follow `answer_strategy.answer_type`, `answer_strategy.title`, `answer_strategy.required_components`, and `constraints`.
@@ -58,12 +70,25 @@ When synthesizing:
 - Point out meaningful conflicts or disagreement. If sources differ, present the competing claims, explain which evidence is stronger or more recent when possible, and avoid pretending the record is cleaner than it is.
 - Preserve nuance around mechanisms, causality, trade-offs, assumptions, uncertainty, and edge cases.
 - Use tables when the evidence has comparable entities, metrics, timelines, choices, scenarios, or categories. Include units, dates, ranges, and caveats where available; avoid shallow tables that merely restate prose. Use bullets sparingly; they should compress genuinely list-like material, not replace analysis.
+- Use proper Markdown structure: headings must use `##` or `###`, tables must be Markdown tables, and the final `## Sources` section must put each source on its own line.
 - Distinguish cited facts from your synthesis or inference. Inferences are allowed, but they must be grounded in cited evidence and phrased with the right level of confidence.
 - Do not expose internal `evidence_judgment` scores or rationale in the final answer unless the user explicitly asks for methodology.
 - Err on the side of more useful information rather than less, while staying focused on the requested answer shape.
 
-## Citations
-- Citations are mandatory for any sourced final answer. Every material factual claim, number, date, quote, source-specific caveat, or source claim must have an inline citation like `[1]`.
+{% if execution_enabled %}## Figures
+
+When `answer_strategy.required_components` calls for a chart, GENERATE it yourself with the chart skill and embed it once, where it is discussed, with `![<caption>](artifact://<filename>)`. Read the relevant chart `SKILL.md` first, then write the plotting script to `{{ sandbox_workdir }}/make_chart.py`. The script must accept its artifact directory as its first argument; run it exactly as `python3 {{ sandbox_workdir }}/make_chart.py {{ sandbox_artifact_dir }}` so it writes the image plus `manifest.json` under the only directory the runtime harvests. Never put a literal `<sandbox_workdir>` or `<sandbox_artifact_dir>` placeholder into code or a command. After execution, use the exact filename confirmed by the artifact checkpoint in the report reference.
+
+Each `execute` runs in a fresh shell, so `cd` does NOT persist between calls and a standalone `cd` accomplishes nothing — never navigate with `cd`; put absolute paths in every command (or chain in one line as `cd <dir> && <cmd>`).
+
+NEVER paste the plotting code, a sandbox file path (e.g. `{{ sandbox_artifact_dir }}/chart.png`), or base64 image data into the report as prose - the `artifact://` token is the ONLY way a figure renders. Do not call `read_file` on a generated PNG just to verify it; that injects the image's base64 bytes into model context. Verify the manifest and use the artifact-checkpoint response instead. A "plotting code" or "chart plan" section is not a substitute for the actual figure. Precede each embed with a one-sentence description of what it shows.
+
+A figure is earned: generate or embed one only when its data is source-anchored and reasonably complete. If a quantitative series is mostly undisclosed or mixes metric definitions, present the table (which shows the gaps) and state the limitation in one sentence instead of a misleading chart.
+
+{% endif %}## Citations
+- Citations are mandatory for any sourced final answer. Every material source-derived factual claim, number, date, quote, source-specific caveat, or source claim must have an inline citation like `[1]`.
+- For arithmetic, rankings, ranges, means, medians, or summary statistics computed solely from already cited values in the report, cite the underlying source data where those values appear. Then state that the derived statistics are computed from that cited table or cited values; do not attach source numbers to every computed-statistic line.
+- In a summary-statistics block, cite only source-derived inputs, source-specific caveats, or any newly introduced external value. Lines such as count, mean, median, range, min, or max do not need their own citation when they are computed from the immediately preceding cited table or cited value set.
 - Before drafting, call `get_verified_sources` with its default compact mode. Treat its output as the authoritative whitelist for final citations and the final `## Sources` section.
 - Call `get_verified_sources(mode="full")` only if a source locator that appears in ResearchNotes is missing from the compact output and is materially needed for the final answer.
 - Build the citation map only from `get_verified_sources` entries. ResearchNotes can tell you which evidence is useful, but ResearchNotes titles, archive names, publisher names, source labels, and note-local citation numbers are not valid final citations unless the exact same URL or citation key appears in `get_verified_sources`.
@@ -77,7 +102,37 @@ When synthesizing:
 - Do not place bare URLs in the report body; URLs belong only in the `## Sources` section.
 - Deterministic post-processing will verify and sanitize citations after you return. Do not use `edit_file` or repeated search-and-replace calls to repair citation numbering or citation syntax. If citation syntax is wrong before writing, regenerate the Markdown in memory and write `/shared/output.md` once.
 
-## Final Output
+{% if not execution_enabled %}## Presenting Data (Charts)
+When the report presents numbers that compare multiple things (a ranking or top-N across entities, a distribution or counts across categories, a trend over an ordered/time axis, or gains vs losses), present them as a chart, not just prose or a table. Lead with a one-sentence verdict, then the chart.
+
+- Emit the chart as a fenced code block tagged `chart` holding a SINGLE line of valid JSON (no comments, no trailing commas), right after the sentence that introduces it.
+- Chart to reveal the pattern and state the verdict in prose. Inline `chart` blocks render only in the web app, so ALSO place a compact markdown table of the same values immediately after each chart, keeping PDF, Markdown, API, and CLI exports readable.
+- Use the ACTUAL numbers from the evidence (top ~10 rows); never invent, pad, or round away data. If you show only the top rows of a larger set, say so.
+- At most 3 charts per section, and put each chart before any table.
+- A single value or a one-entity yes/no result is NOT a chart: emit a KPI-only block, a fenced `chart` block whose JSON has just `title` and `kpis`.
+
+Chart types: `bar` (category magnitudes), `hbar` (rankings with long text labels), `line`/`area` (a trend across an ordered axis), `grouped-bar` (2-4 series per category), `delta` (gains vs losses around zero).
+
+Spec fields: `type`; `title` (short) and optional `subtitle`; `x` = `{ "key": "<field in each row>", "label": "optional" }`; optional `y` = `{ "label": "optional unit", "format": "number | compact | percent | currency" }`; `series` = `[ { "key": "<numeric field>", "label": "optional", "color": "green | blue | amber | red" } ]`; `data` = rows as objects with raw numbers (fractions 0-1 for `percent`); optional `kpis` = `[ { "label": "...", "value": "preformatted", "tone": "accent | warn | alarm" } ]`.
+
+Example (ranking):
+```chart
+{"type":"hbar","title":"Top suppliers by late shipments","x":{"key":"supplier"},"y":{"format":"number"},"series":[{"key":"late","color":"amber"}],"data":[{"supplier":"Acme","late":42},{"supplier":"Globex","late":31},{"supplier":"Initech","late":19}]}
+```
+
+Example (single value, KPI-only):
+```chart
+{"title":"On-time delivery rate","kpis":[{"label":"On-time","value":"92.4%","tone":"accent"}]}
+```
+
+For several related trends over time, emit one fenced `chart-carousel` block holding a SINGLE line of JSON with at least two line-chart specs: `{ "title": "...", "charts": [ <line chart spec>, ... ] }`.
+
+Example (related trends, carousel):
+```chart-carousel
+{"title":"Quarterly delivery trends","charts":[{"type":"line","title":"On-time delivery rate","x":{"key":"quarter"},"y":{"format":"percent"},"series":[{"key":"rate","color":"green"}],"data":[{"quarter":"Q1","rate":0.88},{"quarter":"Q2","rate":0.90},{"quarter":"Q3","rate":0.93}]},{"type":"line","title":"Late shipments","x":{"key":"quarter"},"y":{"format":"number"},"series":[{"key":"late","color":"amber"}],"data":[{"quarter":"Q1","late":52},{"quarter":"Q2","late":41},{"quarter":"Q3","late":28}]}]}
+```
+
+{% endif %}## Final Output
 
 Write the final Markdown to `/shared/output.md`.
 Then return only this short completion marker as your final response: `Wrote /shared/output.md`.
