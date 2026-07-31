@@ -38,15 +38,6 @@ Common issues and solutions for the AI-Q blueprint.
 | SSE stream disconnects | Network timeout | Client auto-reconnects using `last_event_id`; refer to [Data Flow](../architecture/data-flow.md) |
 | Job status stuck on RUNNING | Dask worker crashed | Check Dask logs; the ghost job reaper will eventually mark it FAILURE |
 
-## vLLM / self-hosted endpoints
-
-Issues specific to this Red Hat fork's vLLM support. Upstream has no equivalent section.
-
-| Issue | Cause | Fix |
-|-------|-------|-----|
-| `/think` or `/no_think` in output | vLLM served without a `--reasoning-parser`, so the directive is not consumed | Configure a reasoning parser on the vLLM server. Use the `thinking:` config field rather than prompt text; ensure `_type: openai` for vLLM, not `_type: nim`, and remove any `chat_template_kwargs`. See [Reasoning Control](../customization/vllm-migration.md#reasoning-control-thinking) |
-| `<think>...</think>` blocks in output | Reasoning model producing visible thinking tokens | For vLLM: start with `--reasoning-parser deepseek_r1`. For NIM: check `enable_thinking` in `chat_template_kwargs` |
-
 ## Nemotron Super — Build Endpoint Availability
 
 Nemotron Super (`nvidia/nemotron-3-super-120b-a12b`) is compatible and tested with AIQ, but the NVIDIA Build API endpoints have limited availability due to high demand. During peak periods you may observe:
@@ -169,3 +160,12 @@ Then open [http://localhost:6006](http://localhost:6006) to inspect traces, toke
 # List registered NeMo Agent Toolkit plugins
 .venv/bin/nat info components
 ```
+
+## vLLM / self-hosted endpoints
+
+Issues specific to this Red Hat fork's vLLM support. Upstream has no equivalent section.
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| `/think` or `/no_think` in output | vLLM served without a `--reasoning-parser`, so the directive is not consumed | Configure a reasoning parser on the vLLM server. Use the `thinking:` config field rather than prompt text; ensure `_type: openai` for vLLM, not `_type: nim`, and remove any `chat_template_kwargs`. See [Reasoning Control](../customization/vllm-migration.md#reasoning-control-thinking) |
+| `<think>...</think>` blocks in output | Reasoning model producing visible thinking tokens | For vLLM: start with `--reasoning-parser deepseek_r1`. For NIM: check `enable_thinking` in `chat_template_kwargs` |
