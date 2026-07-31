@@ -40,10 +40,10 @@ For the full NAT MCP reference:
 | Scenario | Pattern | Section |
 |---|---|---|
 | MCP server has no per-user auth | `mcp_client` function group | [Connect AIQ to an MCP Server](#connect-aiq-to-an-mcp-server) |
+| Another app should call AIQ tools over MCP | `nat mcp serve` or `nat fastmcp server run` | [Publish AIQ as an MCP Server](#publish-aiq-tools-as-an-mcp-server) |
 | MCP server uses backend / app credentials | `mcp_client` + `mcp_service_account` | [Service-Account MCP Servers](#service-account-mcp-servers) |
 | Downstream API trusts the AIQ user's bearer token | Custom AIQ tool using `get_auth_token()` | [Forwarding AIQ User Identity](#forwarding-aiq-user-identity-from-a-tool) |
 | MCP server requires per-user OAuth consent | Planned for AIQ 2.2 / 2.3 | [Per-User MCP OAuth (planned)](#per-user-mcp-oauth-planned) |
-| Another app should call AIQ tools over MCP | `nat mcp serve` or `nat fastmcp server run` | [Publish AIQ as an MCP Server](#publish-aiq-tools-as-an-mcp-server) |
 
 ## Prerequisites
 
@@ -116,7 +116,7 @@ Use `exclude_tools` to specialize individual agents:
 functions:
   shallow_research_agent:
     _type: shallow_research_agent
-    llm: nemotron_nano_llm
+    llm: nemotron_super_llm
     exclude_tools:
       - mcp_financial_tools__expensive_long_running_tool
 ```
