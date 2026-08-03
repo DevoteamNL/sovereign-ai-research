@@ -61,17 +61,15 @@
     "tailwindcss": "^4.0.0",
     "vitest": "4.1.0"
   },
-  "overrides": {
-    "picomatch": ">=4.0.4",
-    "brace-expansion": ">=2.0.3",
-    "dompurify": ">=3.3.2"
-  },
   "msw": {
     "workerDirectory": [
       "public"
     ]
   },
   "overrides": {
+    "picomatch": ">=4.0.4",
+    "brace-expansion": ">=2.0.3",
+    "dompurify": ">=3.3.2",
     "postcss": "^8.5.23"
   }
 }
