@@ -94,6 +94,13 @@ frontends/benchmarks/*/analysis/freshqa_output_*.csv
 frontends/benchmarks/*/analysis/freshqa_scored_*.csv
 frontends/benchmarks/*/analysis/*.csv
 
+# Jupyter
+.ipynb_checkpoints/
+
+# MLflow evaluation exports
+aiq_mlflow_trace_export/
+*.zip
+
 # Configs created in notebooks
 docs/notebooks/config_*.yml
 # Local images (not committed) for notebooks
