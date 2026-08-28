@@ -47,15 +47,29 @@ Red Hat AI Enterprise adds the platform capabilities needed to operate the appli
 This deployment uses **quantized** and smaller-sized models for efficient GPU memory usage in addition to leveraging optional MIG configuration for added GPU optimization. These requirements are when models are deployed **locally on your GPUs** using vLLM (not using NGC cloud inference).
 
 **Models deployed on your cluster:**
+
 - **RedHatAI/gpt-oss-120b (Orchestrator)**: ~80GB VRAM (quantized)
 - **RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8 (Intent & Researcher)**: ~25-30GB VRAM (quantized)
 - **nvidia/Nemotron-Mini-4B-Instruct (Summary)**: ~8-10GB VRAM
 
 **Standard deployment requirements (full GPUs, not using MIG):**
+
 - **3x NVIDIA H100** (80GB) or **A100 80GB**
   - GPU 0: gpt-oss-120b (orchestrator) - 1 GPU (~80GB)
   - GPU 1: nemotron-nano-30b (intent & researcher) - 1 GPU (~30GB)
   - GPU 2: nemotron-mini-4b (summary) - 1 GPU (~10GB)
+
+**Conservative AWS local-vLLM profile (new):**
+
+- **Primary target:** 2x `g6e.2xlarge` (L40S 48GB) + optional 1x `g6.2xlarge` or `g5.2xlarge` helper node
+  - GPU 0 (g6e): `RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic` (orchestrator)
+  - GPU 1 (g6e): `RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` (intent & researcher)
+  - Optional helper GPU (g6/g5): `nvidia/Nemotron-Mini-4B-Instruct` (summary)
+- Initial conservative context window: 32k for orchestrator and researcher (via vLLM `--max-model-len=32768`)
+- Configuration overlays:
+  - `deploy/helm/vllm-models/values-aws-gpu-conservative.yaml`
+  - `deploy/helm/aiq-rh/values-vllm-aws-conservative.yaml`
+- Note: overlays include placeholder node labels for GPU class routing. Replace node selectors after cluster access is available.
 
 **Optional: Multi-Instance GPU (MIG) optimization**
 
@@ -79,7 +93,6 @@ When using NVIDIA NGC API for cloud-hosted inference, **no local GPU resources a
 
 - **PostgreSQL PersistentVolumeClaim**: 10GB
   - Single PVC (`aiq-postgres-data`) for job metadata, agent checkpoints, and research summaries
-  
 - **ChromaDB and application data**: Uses ephemeral storage (`emptyDir`)
   - Data does not persist across pod restarts in default configuration
   - To persist ChromaDB vectors and documents, add a PVC for the backend's `/app/data` volume mount
@@ -110,12 +123,14 @@ The following instructions will deploy the Red Hat Research AI quickstart to you
 ### Prerequisites
 
 Before deployment, ensure you have the following in place:
+
 - OpenShift cluster with OpenShift AI installed (see version requirements above)
 - OpenShift AI has a DataScienceCluster resource with kserve and dashboard components set to managed
 - For vLLM deployment: GPU nodes available with NVIDIA GPU Operator installed
 - For NGC deployment: No GPU infrastructure required
 
 Obtain the following API keys:
+
 - **NVIDIA_API_KEY** (required for NGC model deployment)
   - Get your API key at: https://org.ngc.nvidia.com/setup/api-key
   - Sign up for NIM access at: https://build.nvidia.com/
@@ -184,6 +199,7 @@ oc create secret docker-registry ngc-api -n ns-aiq \
 5. Choose your deployment option:
 
 **AI quickstart decision tree:**
+
 ```
 Do you have GPU infrastructure?
 ├─ NO  → Option B: NGC Cloud Models (easy onramp, no GPU needed)
@@ -201,9 +217,19 @@ Deploy models locally on your GPUs for full deployment control and integration w
 ```bash
 cd deploy/helm
 
+# Optional offline check (no cluster required): render final manifests
+helm template vllm-models vllm-models/ \
+  -f vllm-models/values.yaml \
+  -f vllm-models/values-aws-gpu-conservative.yaml | rg -n "nodeSelector|max-model-len|served-model-name|nvidia.com/gpu"
+
+helm template aiq aiq-rh/ \
+  -f aiq-rh/values-vllm.yaml \
+  -f aiq-rh/values-vllm-aws-conservative.yaml | rg -n "VLLM_BASE_URL|VLLM_ORCHESTRATOR_BASE_URL|VLLM_SUMMARY_BASE_URL|VLLM_.*_MODEL|model_name:"
+
 # Step 1: Deploy vLLM models via KServe
 helm install vllm-models vllm-models/ \
-  -n ns-aiq
+  -n ns-aiq \
+  -f vllm-models/values-aws-gpu-conservative.yaml
 
 # Wait for InferenceServices to be ready (2-5 minutes for model downloads)
 oc get inferenceservices -n ns-aiq -w
@@ -212,6 +238,7 @@ oc get inferenceservices -n ns-aiq -w
 helm install aiq aiq-rh/ \
   -n ns-aiq \
   -f aiq-rh/values-vllm.yaml \
+  -f aiq-rh/values-vllm-aws-conservative.yaml \
   -f aiq-rh/values-branding.yaml
 
 # Verify deployment
@@ -219,6 +246,7 @@ oc get pods -n ns-aiq
 ```
 
 **What you get:**
+
 - LLM inference via local vLLM servers on your GPUs
 - Embedded LlamaIndex with ChromaDB for document storage
 - Full control over model selection and hosting
@@ -244,6 +272,7 @@ oc get pods -n ns-aiq
 ```
 
 **What you get:**
+
 - LLM inference via NGC API (cloud-hosted, pay-per-use)
 - Embedded LlamaIndex with ChromaDB for document storage
 - No GPU infrastructure needed
@@ -259,6 +288,7 @@ The NVIDIA AI-Q Blueprint is designed to work optionally with the NVIDIA RAG Blu
 [RAG AI quickstart based on NVIDIA RAG Blueprint](https://docs.redhat.com/en/learn/ai-quickstarts/rh-aml-rag-nvidia)
 
 To integrate with the RAG quickstart, see the full deployment guide for the following configuration options:
+
 - **Option C:** vLLM + RAG Blueprint (`aiq-rh/values-vllm-frag.yaml`)
 - **Option D:** NGC + RAG Blueprint (`aiq-rh/values-frag.yaml`)
 
@@ -275,12 +305,14 @@ oc get pods -n ns-aiq
 ```
 
 **Expected pods (all deployments):**
+
 - `aiq-backend-*` - Main application backend
-- `aiq-frontend-*` - Web UI  
+- `aiq-frontend-*` - Web UI
 - `aiq-postgres-*` - PostgreSQL database
 
 **Additional pods (vLLM deployment only):**
-- `gpt-oss-120b-predictor-*` - Orchestrator model server
+
+- `llama-3-3-70b-fp8-predictor-*` - Orchestrator model server (conservative AWS profile)
 - `nemotron-nano-30b-predictor-*` - Intent & researcher model server
 - `nemotron-mini-4b-predictor-*` - Summary model server
 
@@ -300,6 +332,7 @@ chmod +x install-operators.sh deploy.sh
 ```
 
 This will install:
+
 - **OpenShift Logging** with LokiStack for centralized log aggregation
 - **Grafana** for metrics visualization and dashboards
 - **OpenTelemetry Collector** for distributed tracing telemetry
@@ -322,21 +355,27 @@ echo "https://$(oc get route -n ns-aiq aiq-frontend -o jsonpath='{.spec.host}')"
 3. Test the agent with different query types:
 
 **Simple greeting (meta response - instant):**
+
 ```
 Hello, what can you do?
 ```
+
 **Expected:** Friendly greeting explaining AI-Q capabilities within 2-5 seconds.
 
 **Shallow research (quick research with citations - 10-30 seconds):**
+
 ```
 What is Red Hat OpenShift?
 ```
+
 **Expected:** Factual answer with web search citations within 10-30 seconds.
 
 **Deep research (comprehensive analysis - 2-5 minutes):**
+
 ```
 Provide a comprehensive analysis of Kubernetes security best practices
 ```
+
 **Expected:** Multi-section structured report with planning steps, research progress updates, and comprehensive citations. Overall end-to-end processing time varies.
 
 4. (Optional) Upload documents for knowledge retrieval:
@@ -410,6 +449,7 @@ This quickstart focuses on deploying AI-Q on Red Hat OpenShift AI using pre-buil
 - **UI Branding:** Pre-built images include Red Hat branding by default. The main install commands use `values-branding.yaml` to add a custom favicon and demonstrate runtime branding customization. You may edit this file to change colors, logos, or text for custom demos without rebuilding images.
 
   See [Customization Reference](docs/advanced-docs/customization-reference.md) for branding details.
+
 - **Model Selection:** Edit `deploy/helm/vllm-models/values.yaml` to change vLLM models
 - **Agent Behavior:** Modify inline ConfigMaps in values files (e.g., `aiq-rh/values-vllm.yaml`)
 - **Data Sources:** Configure API keys via the `aiq-credentials` secret
@@ -432,13 +472,13 @@ This quickstart is based on **NVIDIA AI-Q Blueprint v2.1.0** with Red Hat-specif
 
 - **Backend:** `quay.io/tasmith/aiq-backend-redhat:2.1.0`  
   NVIDIA AI-Q v2.1.0
-  
 - **Frontend:** `quay.io/tasmith/aiq-frontend-redhat:2.1.0`  
   NVIDIA AI-Q v2.1.0 + patches 0002-0003 (runtime branding + Red Hat defaults)
 
 Patches are maintained in [`patches/aiq/`](patches/aiq/) and applied during the container build process. See [Customization Reference](docs/advanced-docs/customization-reference.md) for patch details and build instructions.
 
 **Additional Resources:**
+
 - [Deployment Guide](docs/advanced-docs/deployment-guide.md) - All four deployment options (vLLM, NGC, RAG AI quickstart)
 - [Configuration Reference](docs/advanced-docs/configuration-reference.md) - YAML parameter reference for advanced configuration
 
@@ -467,7 +507,3 @@ This AI quickstart is based on the [NVIDIA AI-Q Blueprint](https://github.com/NV
 - **Product**: Red Hat AI Enterprise
 - **Use case**: Academic research
 - **Industry**: Education
-
-
-
-

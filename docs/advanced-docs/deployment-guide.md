@@ -23,14 +23,16 @@ Do you have vLLM server(s) running?
 **Best for:** OpenShift AI deployments with GPU infrastructure
 
 **What you need:**
+
 - vLLM server(s) running and accessible from the cluster
-- Models loaded: 
+- Models loaded:
   - `RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` (intent & research)
   - `RedHatAI/gpt-oss-120b` (orchestration)
   - `nvidia/Nemotron-Mini-4B-Instruct` (summarization)
 - API keys: `NVIDIA_API_KEY` (for image pulls only), `TAVILY_API_KEY` (optional)
 
 **What you get:**
+
 - LLM inference via your vLLM server(s)
 - Embedded LlamaIndex with ChromaDB for document storage
 - Full control over model selection and hosting
@@ -52,16 +54,63 @@ helm upgrade --install aiq aiq-rh/ \
 kubectl get pods -n ns-aiq
 ```
 
+### AWS Conservative Profile (2x g6e + optional g6/g5 helper)
+
+Use this profile when you need fully local vLLM with smaller GPU envelopes than H100/A100 defaults.
+
+- g6e node 1: `RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic` (orchestrator)
+- g6e node 2: `RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` (intent + researcher)
+- optional g6/g5 helper: `nvidia/Nemotron-Mini-4B-Instruct` (summary)
+- initial context budget: 32k for orchestrator/researcher via `--max-model-len=32768`
+
+Use these overlays:
+
+- `deploy/helm/vllm-models/values-aws-gpu-conservative.yaml`
+- `deploy/helm/aiq-rh/values-vllm-aws-conservative.yaml`
+
+Offline dry-run checks (no cluster required):
+
+```bash
+cd deploy/helm
+
+helm template vllm-models vllm-models/ \
+  -f vllm-models/values.yaml \
+  -f vllm-models/values-aws-gpu-conservative.yaml | rg -n "nodeSelector|max-model-len|served-model-name|nvidia.com/gpu"
+
+helm template aiq aiq-rh/ \
+  -f aiq-rh/values-vllm.yaml \
+  -f aiq-rh/values-vllm-aws-conservative.yaml | rg -n "VLLM_BASE_URL|VLLM_ORCHESTRATOR_BASE_URL|VLLM_SUMMARY_BASE_URL|VLLM_.*_MODEL|model_name:"
+```
+
+Deployment (when cluster access is available):
+
+```bash
+cd deploy/helm
+
+helm upgrade --install vllm-models vllm-models/ \
+  -n ns-aiq --create-namespace \
+  -f vllm-models/values-aws-gpu-conservative.yaml
+
+helm upgrade --install aiq aiq-rh/ \
+  -n ns-aiq --create-namespace \
+  -f aiq-rh/values-vllm.yaml \
+  -f aiq-rh/values-vllm-aws-conservative.yaml
+```
+
+Important: the overlay uses placeholder nodeSelector labels for g6e/g6/g5 classes. Replace those selectors with your actual node labels before deploying.
+
 ### Configuration
 
 The `values-vllm.yaml` file is pre-configured for use with the `vllm-models` chart:
 
 **vLLM Endpoints** (KServe InferenceServices):
+
 - Intent & Researcher: `http://nemotron-nano-30b-predictor.ns-aiq.svc.cluster.local:8080`
 - Orchestrator: `http://gpt-oss-120b-predictor.ns-aiq.svc.cluster.local:8080`
 - Summary: `http://nemotron-mini-4b-predictor.ns-aiq.svc.cluster.local:8080`
 
 **Models served**:
+
 - Intent: `RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` (30B FP8)
 - Researcher: `RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` (30B FP8)
 - Orchestrator: `RedHatAI/gpt-oss-120b` (120B, ~80GB VRAM)
@@ -87,10 +136,12 @@ helm install aiq aiq-rh/ \
 **Best for:** Quick start without GPU infrastructure
 
 **What you need:**
+
 - API keys: `NVIDIA_API_KEY`, `TAVILY_API_KEY` (optional)
 - Internet connectivity to NGC API
 
 **What you get:**
+
 - LLM inference via NGC API (pay-per-use)
 - Embedded LlamaIndex with ChromaDB for document storage
 - No additional infrastructure needed
@@ -111,6 +162,7 @@ kubectl get pods -n ns-aiq
 ### Configuration
 
 The default `aiq-rh/values.yaml` configures:
+
 - Config file: `configs/config_web_default_llamaindex.yml` (default)
 - Models used:
   - Intent: `nvidia/nemotron-3-nano-30b-a3b`
@@ -125,11 +177,13 @@ The default `aiq-rh/values.yaml` configures:
 **Best for:** Cloud LLMs with enterprise RAG infrastructure
 
 **What you need:**
+
 - [RAG AI quickstart (based on NVIDIA RAG Blueprint)](https://docs.redhat.com/en/learn/ai-quickstarts/rh-aml-rag-nvidia) deployed and accessible
 - RAG server URLs (query and ingestion endpoints)
 - API keys: `NVIDIA_API_KEY`, `TAVILY_API_KEY` (optional)
 
 **What you get:**
+
 - LLM inference via NGC API
 - Enterprise RAG with vector database, reranking, multi-collection support
 - Shared RAG infrastructure across multiple applications
@@ -155,6 +209,7 @@ kubectl get pods -n ns-aiq
 ### Configuration
 
 The `values-frag.yaml` file configures:
+
 - Config file: `configs/config_web_frag.yml`
 - RAG endpoints: Set via `RAG_SERVER_URL` and `RAG_INGEST_URL`
 - Models: Same NGC models as Option B
@@ -166,6 +221,7 @@ The `values-frag.yaml` file configures:
 **Best for:** Fully local deployment with enterprise RAG infrastructure
 
 **What you need:**
+
 - vLLM server(s) running and accessible from the cluster
 - Models loaded:
   - `RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` (intent & research)
@@ -176,6 +232,7 @@ The `values-frag.yaml` file configures:
 - API keys: `TAVILY_API_KEY` (optional), `SERPER_API_KEY` (optional)
 
 **What you get:**
+
 - LLM inference via your vLLM server(s) - full control, data locality
 - Enterprise RAG with vector database, reranking, multi-collection support
 - Shared RAG infrastructure across multiple applications
@@ -192,6 +249,7 @@ cd deploy/helm
 helm upgrade --install aiq aiq-rh/ \
   -n ns-aiq --create-namespace \
   -f aiq-rh/values-vllm-frag.yaml \
+  -f aiq-rh/values-vllm-aws-conservative.yaml \
   --set aiq.apps.backend.env.RAG_SERVER_URL=http://rag-server.<rag-namespace>.svc.cluster.local:8081/v1 \
   --set aiq.apps.backend.env.RAG_INGEST_URL=http://ingestor-server.<rag-namespace>.svc.cluster.local:8082/v1
 
@@ -204,6 +262,7 @@ kubectl get pods -n ns-aiq
 The `values-vllm-frag.yaml` file is pre-configured for use with the `vllm-models` chart:
 
 **vLLM Endpoints** (KServe InferenceServices):
+
 - Intent & Researcher: `http://nemotron-nano-30b-predictor.ns-aiq.svc.cluster.local:8080`
 - Orchestrator: `http://gpt-oss-120b-predictor.ns-aiq.svc.cluster.local:8080`
 - Summary: `http://nemotron-mini-4b-predictor.ns-aiq.svc.cluster.local:8080`
@@ -211,9 +270,10 @@ The `values-vllm-frag.yaml` file is pre-configured for use with the `vllm-models
 **RAG endpoints**: Set via command-line (update `<rag-namespace>` to your RAG AI quickstart namespace)
 
 **Models served**:
+
 - Intent: `RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` (30B FP8)
 - Researcher: `RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` (30B FP8)
-- Orchestrator: `RedHatAI/gpt-oss-120b` (120B, ~80GB VRAM)
+- Orchestrator: `RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic` (with conservative AWS overlay)
 - Summary: `nvidia/Nemotron-Mini-4B-Instruct` (4B)
 
 This gives you the best of both worlds: local model control + enterprise RAG capabilities.
@@ -256,12 +316,14 @@ curl http://localhost:8000/health
 ### Troubleshooting
 
 **Pods not starting:**
+
 ```bash
 kubectl describe pod <pod-name> -n ns-aiq
 kubectl logs <pod-name> -n ns-aiq
 ```
 
 **Backend can't connect to vLLM:**
+
 ```bash
 # Check if vLLM server is accessible
 kubectl run -it --rm debug --image=curlimages/curl --restart=Never -- \
@@ -272,6 +334,7 @@ kubectl logs -n ns-aiq -l component=backend --tail=100
 ```
 
 **Image pull errors:**
+
 ```bash
 # Verify secrets exist
 kubectl get secrets -n ns-aiq
@@ -281,6 +344,7 @@ kubectl describe pod <pod-name> -n ns-aiq | grep -A 5 "Events"
 ```
 
 **Force pull new image version:**
+
 ```bash
 kubectl delete pod -l component=frontend -n ns-aiq
 kubectl delete pod -l component=backend -n ns-aiq

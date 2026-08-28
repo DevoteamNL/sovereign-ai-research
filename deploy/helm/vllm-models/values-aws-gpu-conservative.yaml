@@ -1,0 +1,83 @@
+# AWS conservative local-vLLM profile
+#
+# Primary profile (Profile B):
+# - 2x g6e.2xlarge nodes for orchestrator + researcher
+# - 1x optional g6/g5 helper node for summary
+#
+# This file intentionally uses placeholder node labels. Replace selectors after
+# cluster access is available and you can inspect real node labels.
+
+models:
+  # Disable the default 120B orchestrator model for conservative GPU usage.
+  gpt-oss-120b:
+    enabled: false
+
+  # Conservative orchestrator for 48GB class GPUs.
+  llama-3-3-70b-fp8:
+    enabled: true
+    modelUri: hf://RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
+    servedModelName: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
+    resources:
+      limits:
+        nvidia.com/gpu: "1"
+        memory: "64Gi"
+        cpu: "8"
+      requests:
+        nvidia.com/gpu: "1"
+        memory: "48Gi"
+        cpu: "4"
+    vllmArgs:
+      - --tensor-parallel-size=1
+      - --max-model-len=32768
+      - --enable-force-include-usage
+      - --enable-auto-tool-choice
+      - --tool-call-parser=openai
+    nodeSelector:
+      # Replace these with your actual cluster labels for g6e (L40S) nodes.
+      aiq.redhat.com/gpu-profile: g6e
+    tolerations: []
+
+  # Intent + researcher model on second g6e node.
+  nemotron-nano-30b:
+    enabled: true
+    resources:
+      limits:
+        nvidia.com/gpu: "1"
+        memory: "32Gi"
+        cpu: "6"
+      requests:
+        nvidia.com/gpu: "1"
+        memory: "24Gi"
+        cpu: "3"
+    vllmArgs:
+      - --enable-force-include-usage
+      - --max-model-len=32768
+      - --enable-auto-tool-choice
+      - --tool-call-parser=qwen3_coder
+      - --trust-remote-code
+      - --reasoning-parser-plugin=/mnt/models/nano_v3_reasoning_parser.py
+      - --reasoning-parser=nano_v3
+    nodeSelector:
+      # Replace these with your actual cluster labels for g6e (L40S) nodes.
+      aiq.redhat.com/gpu-profile: g6e
+    tolerations: []
+
+  # Summary model on optional helper GPU node (g6/g5 24GB class).
+  nemotron-mini-4b:
+    enabled: true
+    resources:
+      limits:
+        nvidia.com/gpu: "1"
+        memory: "24Gi"
+        cpu: "4"
+      requests:
+        nvidia.com/gpu: "1"
+        memory: "16Gi"
+        cpu: "2"
+    vllmArgs:
+      - --tensor-parallel-size=1
+      - --max-model-len=4096
+    nodeSelector:
+      # Replace these with your actual cluster labels for helper g6/g5 nodes.
+      aiq.redhat.com/gpu-profile: g6-or-g5
+    tolerations: []
