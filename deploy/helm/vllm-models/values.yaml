@@ -8,8 +8,8 @@ global:
 # vLLM ServingRuntime configuration
 runtime:
   image: registry.redhat.io/rhaii-early-access/vllm-cuda-rhel9
-  tag: 3.4.0-ea.2
-  shmSize: 2Gi  # Shared memory size for vLLM
+  tag: 3.5.0-ea.2
+  shmSize: 2Gi # Shared memory size for vLLM
 
 # ==============================================================================
 # MIG Configuration Guide
@@ -155,41 +155,41 @@ models:
 
 # Optional: GPU-constrained alternative for orchestrator
 # Enable this instead of gpt-oss-120b if you have limited GPU memory
-  # llama-3-3-70b-fp8:
-  #   enabled: false
-  #   modelUri: hf://RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
-  #   servedModelName: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
-  #
-  #   # Option 1: Full GPU (A100 40GB or H100)
-  #   resources:
-  #     limits:
-  #       nvidia.com/gpu: "1"  # ~35-40GB VRAM
-  #     requests:
-  #       nvidia.com/gpu: "1"
-  #       memory: "48Gi"
-  #       cpu: "4"
-  #   vllmArgs:
-  #     - --tensor-parallel-size=1
-  #     - --max-model-len=8192
-  #
-  #   # Option 2: H100 MIG (1x 3g.47gb slice - 47GB VRAM)
-  #   # resources:
-  #   #   limits:
-  #   #     nvidia.com/mig-3g.47gb: "1"
-  #   #     memory: 48Gi
-  #   #     cpu: "4"
-  #   #   requests:
-  #   #     nvidia.com/mig-3g.47gb: "1"
-  #   #     memory: 40Gi
-  #   #     cpu: "2"
-  #   # vllmArgs:
-  #   #   - --tensor-parallel-size=1
-  #   #   - --max-model-len=8192
-  #   #   - --gpu-memory-utilization=0.9
-  #
-  #   nodeSelector: {}
-  #     # For MIG: nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
-  #   tolerations: []
+# llama-3-3-70b-fp8:
+#   enabled: false
+#   modelUri: hf://RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
+#   servedModelName: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
+#
+#   # Option 1: Full GPU (A100 40GB or H100)
+#   resources:
+#     limits:
+#       nvidia.com/gpu: "1"  # ~35-40GB VRAM
+#     requests:
+#       nvidia.com/gpu: "1"
+#       memory: "48Gi"
+#       cpu: "4"
+#   vllmArgs:
+#     - --tensor-parallel-size=1
+#     - --max-model-len=8192
+#
+#   # Option 2: H100 MIG (1x 3g.47gb slice - 47GB VRAM)
+#   # resources:
+#   #   limits:
+#   #     nvidia.com/mig-3g.47gb: "1"
+#   #     memory: 48Gi
+#   #     cpu: "4"
+#   #   requests:
+#   #     nvidia.com/mig-3g.47gb: "1"
+#   #     memory: 40Gi
+#   #     cpu: "2"
+#   # vllmArgs:
+#   #   - --tensor-parallel-size=1
+#   #   - --max-model-len=8192
+#   #   - --gpu-memory-utilization=0.9
+#
+#   nodeSelector: {}
+#     # For MIG: nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
+#   tolerations: []
 
 # Service configuration
 service:
