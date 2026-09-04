@@ -41,7 +41,7 @@ models:
       - --enable-prefix-caching
       - --speculative_config.num_speculative_tokens=2
       - --speculative_config.method=ngram
-      - --model=nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-FP8
+      - --model=RedHatAI/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-FP8
       - --mamba-backend=flashinfer
       - --mamba-cache-mode=align
       - --reasoning-parser=nemotron_v3
