@@ -39,8 +39,8 @@ models:
       - --moe-backend=marlin
       - --kv-cache-dtype=fp8
       - --enable-prefix-caching
-      - --speculative_config.num_speculative_tokens=3
-      - --speculative_config.model=nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4-DSpark
+      - --speculative_config.num_speculative_tokens=2
+      - --speculative_config.method=ngram
       - --model=nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4
       - --mamba-backend=flashinfer
       - --mamba-cache-mode=align
