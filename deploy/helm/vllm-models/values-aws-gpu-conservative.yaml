@@ -15,6 +15,7 @@ models:
   # Conservative orchestrator for 48GB class GPUs.
   nemotron-3-5-lightning-30b:
     servedModelName: RedHatAI/NVIDIA-Nemotron-3-5-Lightning-30B
+    modelUri: hf://RedHatAI/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4
     enabled: true
     resources:
       limits:
