@@ -45,7 +45,7 @@ models:
       - --mamba-backend=flashinfer
       - --mamba-cache-mode=align
       - --reasoning-parser=nemotron_v3
-      - --quantization=modelopt_fp4
+      - --quantization=fp8
     nodeSelector:
       # Replace these with your actual cluster labels for g6e (L40S) nodes.
       aiq.redhat.com/gpu-profile: g6e
