@@ -41,7 +41,7 @@ models:
       - --enable-prefix-caching
       - --speculative_config.num_speculative_tokens=3
       - --speculative_config.model=nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4-DSpark
-      - --model nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4
+      - --model=nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4
       - --mamba-backend=flashinfer
       - --mamba-cache-mode=align
       - --reasoning-parser=nemotron_v3
