@@ -36,7 +36,7 @@ models:
       - --enable-auto-tool-choice
       - --tool-call-parser=qwen3_coder
       - --trust-remote-code
-      - --moe-backend=marlin
+      - --moe-backend=flashinfer_cutlass
       - --kv-cache-dtype=fp8
       - --enable-prefix-caching
       - --speculative_config.num_speculative_tokens=2
@@ -45,6 +45,7 @@ models:
       - --mamba-backend=flashinfer
       - --mamba-cache-mode=align
       - --reasoning-parser=nemotron_v3
+      - --quantization=modelopt_fp4
     nodeSelector:
       # Replace these with your actual cluster labels for g6e (L40S) nodes.
       aiq.redhat.com/gpu-profile: g6e
