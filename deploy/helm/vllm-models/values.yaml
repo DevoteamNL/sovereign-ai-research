@@ -8,7 +8,7 @@ global:
 # vLLM ServingRuntime configuration
 runtime:
   image: registry.redhat.io/rhaii-early-access/vllm-cuda-rhel9
-  tag: 3.5.0-ea.2
+  tag: 3.5.1-1788369031
   shmSize: 2Gi # Shared memory size for vLLM
 
 # ==============================================================================
