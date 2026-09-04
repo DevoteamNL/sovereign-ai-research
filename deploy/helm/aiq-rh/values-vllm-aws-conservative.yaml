@@ -2,7 +2,7 @@
 #
 # Use this file together with values-vllm.yaml or values-vllm-frag.yaml.
 # It repoints orchestrator traffic away from gpt-oss-120b to the conservative
-# llama-3-3-70b-fp8 service and aligns role model names.
+# nemotron-3-5-lightning-30b service and aligns role model names.
 
 apps:
   backend:
@@ -10,11 +10,11 @@ apps:
       # Endpoint routing
       VLLM_BASE_URL: http://nemotron-nano-30b-predictor.ns-aiq.svc.cluster.local:8080
       VLLM_INTENT_BASE_URL: http://nemotron-nano-30b-predictor.ns-aiq.svc.cluster.local:8080
-      VLLM_ORCHESTRATOR_BASE_URL: http://llama-3-3-70b-fp8-predictor.ns-aiq.svc.cluster.local:8080
+      VLLM_ORCHESTRATOR_BASE_URL: http://nemotron-3-5-lightning-30b-predictor.ns-aiq.svc.cluster.local:8080
       VLLM_SUMMARY_BASE_URL: http://nemotron-mini-4b-predictor.ns-aiq.svc.cluster.local:8080
 
       # Model name alignment (must match servedModelName values in vllm-models)
       VLLM_INTENT_MODEL: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
       VLLM_RESEARCHER_MODEL: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
-      VLLM_ORCHESTRATOR_MODEL: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
+      VLLM_ORCHESTRATOR_MODEL: RedHatAI/NVIDIA-Nemotron-3-5-Lightning-30B
       VLLM_SUMMARY_MODEL: nvidia/Nemotron-Mini-4B-Instruct
