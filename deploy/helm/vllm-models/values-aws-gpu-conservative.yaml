@@ -13,10 +13,8 @@ models:
     enabled: false
 
   # Conservative orchestrator for 48GB class GPUs.
-  llama-3-3-70b-fp8:
+  nemotron-3.5-lightning:30b:
     enabled: true
-    modelUri: hf://RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
-    servedModelName: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
     resources:
       limits:
         nvidia.com/gpu: "1"
@@ -31,7 +29,6 @@ models:
       - --max-model-len=32768
       - --enable-force-include-usage
       - --enable-auto-tool-choice
-      - --tool-call-parser=openai
     nodeSelector:
       # Replace these with your actual cluster labels for g6e (L40S) nodes.
       aiq.redhat.com/gpu-profile: g6e
