@@ -13,7 +13,7 @@ models:
     enabled: false
 
   # Conservative orchestrator for 48GB class GPUs.
-  nemotron-3.5-lightning:30b:
+  nemotron-3.5-lightning-30b:
     enabled: true
     resources:
       limits:
