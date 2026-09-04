@@ -29,7 +29,9 @@ models:
     vllmArgs:
       - --tensor-parallel-size=1
       - --max-model-len=8192
-      - --gpu-memory-utilization=0.85
+      - --gpu-memory-utilization=0.75
+      - --mamba-ssm-cache-dtype=float16
+      - --enforce-eager
       - --enable-force-include-usage
       - --enable-auto-tool-choice
       - --tool-call-parser=qwen3_coder
