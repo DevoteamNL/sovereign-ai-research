@@ -29,6 +29,7 @@ models:
       - --max-model-len=32768
       - --enable-force-include-usage
       - --enable-auto-tool-choice
+      - --tool-call-parser=qwen3_coder
     nodeSelector:
       # Replace these with your actual cluster labels for g6e (L40S) nodes.
       aiq.redhat.com/gpu-profile: g6e
