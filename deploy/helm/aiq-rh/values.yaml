@@ -569,3 +569,38 @@ apps:
       annotations: {}
     podSecurityContext: null
 secretEnvAsEnv: false
+
+# OpenShift login (oauth-proxy) in front of the frontend. When enabled, also set
+# apps.frontend.route.enabled and apps.backend.route.enabled to false: the proxy
+# takes over the frontend Route name, and the browser never calls the backend
+# directly (the UI server proxies /api and /websocket to it in-cluster).
+oauthProxy:
+  enabled: false
+  routeName: aiq-frontend
+  # Same image (by digest) the OpenShift AI components on the cluster already run.
+  image: registry.redhat.io/openshift4/ose-oauth-proxy-rhel9@sha256:c2fb73b37910aa6950f756f9db964db8c56cd0d1262aeadb774ca4a67486984f
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# MCP tool servers (connected via function_groups of _type mcp_client in the app
+# config). Map of name -> {enabled, image, port, env, resources}; each becomes
+# Deployment + Service "aiq-mcp-<name>".
+mcpServers: {}
+
+# Self-hosted SearXNG metasearch used by a searxng MCP server.
+searxng:
+  enabled: false
+  image: docker.io/searxng/searxng:2026.10.7-6671d89be
+  engines: []
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi

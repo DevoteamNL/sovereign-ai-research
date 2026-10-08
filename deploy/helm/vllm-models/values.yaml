@@ -18,9 +18,8 @@ runtime:
 #   kubectl describe node <gpu-node> | grep "nvidia.com/mig"
 #
 # Model VRAM requirements (approximate):
-#   gpt-oss-120b: ~80GB (quantized)
 #   nemotron-nano-30b (FP8): ~25-30GB
-#   nemotron-mini-4b: ~8-10GB
+#   granite-embedding-english-r2: ~1GB
 #   llama-3-3-70b-fp8: ~35-40GB
 #
 # Select MIG slices that provide enough VRAM for each model. Examples below
@@ -29,53 +28,54 @@ runtime:
 
 # Model deployments
 models:
-  # Orchestrator model - RedHatAI/gpt-oss-120b
-  gpt-oss-120b:
+  # Orchestrator model - RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+  #
+  # Same model as the researcher below, but deployed as its own InferenceService
+  # on its own GPU so orchestrator requests don't queue behind the researcher's
+  # concurrent calls (deep_researcher runs up to 6 in parallel).
+  #
+  # A 30B model is modest for multi-turn agentic orchestration - validate
+  # orchestration quality before relying on it.
+  nemotron-nano-30b-orchestrator:
     enabled: true
-    modelUri: oci://registry.redhat.io/rhelai1/modelcar-gpt-oss-120b:1.5
-    servedModelName: RedHatAI/gpt-oss-120b
+    modelUri: oci://registry.redhat.io/rhai/modelcar-nvidia-nemotron-3-nano-30b-a3b-fp8:3.0
+    servedModelName: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
 
-    # Option 1: Full GPU (A100 80GB or H100)
+    # Full GPU (L40S 48GB; FP8 weights ~25-30GB leaves KV cache headroom)
     resources:
       limits:
         nvidia.com/gpu: "1"
+        memory: 24Gi
+        cpu: "4"
       requests:
         nvidia.com/gpu: "1"
-        memory: "100Gi"
-        cpu: "8"
+        memory: 16Gi
+        cpu: "2"
+
     vllmArgs:
-      - --tensor-parallel-size=1
-      - --max-model-len=131072
       - --enable-force-include-usage
+      - --max-model-len=131072
       - --enable-auto-tool-choice
-      - --tool-call-parser=openai
+      - --tool-call-parser=qwen3_coder
+      - --trust-remote-code
+      - --reasoning-parser-plugin=/mnt/models/nano_v3_reasoning_parser.py
+      - --reasoning-parser=nano_v3
 
-    # Option 2: H100 MIG (2x 3g.47gb slices with tensor parallelism)
-    # Uncomment and comment out Option 1 to use MIG
-    # resources:
-    #   limits:
-    #     nvidia.com/mig-3g.47gb: "2"  # 2x 47GB = 94GB total
-    #   requests:
-    #     nvidia.com/mig-3g.47gb: "2"
-    #     memory: "80Gi"
-    #     cpu: "4"
-    # vllmArgs:
-    #   - --tensor-parallel-size=2  # MUST match GPU count
-    #   - --max-model-len=131072
-    #   - --gpu-memory-utilization=0.9
-    #   - --enable-force-include-usage
-    #   - --enable-auto-tool-choice
-    #   - --tool-call-parser=openai
+    nodeSelector: {}
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
 
-    nodeSelector:
-      nvidia.com/gpu.product: "NVIDIA-A100-SXM4-80GB"
-      # For MIG: nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
-    tolerations: []
-
-  # Researcher & Intent model - RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
-  nemotron-nano-30b:
+  # Intent, researcher & summary model - RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+  # One vLLM instance serves all three roles (continuous batching); verified
+  # under load: intent/summary ~2s while 6 parallel research calls run.
+  nemotron-nano-30b-intent-researcher-summary:
     enabled: true
-    modelUri: oci://quay.io/jharmison/models:redhatai--nvidia-nemotron-3-nano-30b-a3b-fp8-modelcar
+    # Switched from quay.io/jharmison (personal namespace, no support
+    # guarantee) to the official Red Hat ModelCar. Same model, verified
+    # pullable on RHDP clusters.
+    modelUri: oci://registry.redhat.io/rhai/modelcar-nvidia-nemotron-3-nano-30b-a3b-fp8:3.0
     servedModelName: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
 
     # Option 1: Full GPU (A100 40GB+ or any H100)
@@ -113,48 +113,46 @@ models:
 
     nodeSelector: {}
       # For MIG: nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
-    tolerations: []
+    # Required: GPU nodes are tainted nvidia.com/gpu=true:NoSchedule
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
 
-  # Summary model - nvidia/Nemotron-Mini-4B-Instruct
-  nemotron-mini-4b:
+  # Embedding model - ibm-granite/granite-embedding-english-r2
+  #
+  # Used by the knowledge layer (AIQ_EMBED_*) to index uploaded documents and
+  # embed search queries. Without it the app falls back to NVIDIA's hosted
+  # embedding API. Needs an 8192-token context (app chunks are 1024 tokens)
+  # and no query/passage prefixes (the app's NVIDIA client doesn't add them).
+  # English-only.
+  granite-embedding-english-r2-embedding:
     enabled: true
-    modelUri: hf://nvidia/Nemotron-Mini-4B-Instruct
-    servedModelName: nvidia/Nemotron-Mini-4B-Instruct
+    modelUri: oci://registry.redhat.io/rhai/modelcar-granite-embedding-english-r2:3.0
+    servedModelName: ibm-granite/granite-embedding-english-r2
 
-    # Option 1: Full GPU (any GPU with 10GB+ VRAM)
     resources:
       limits:
         nvidia.com/gpu: "1"
-        memory: "24Gi"
-        cpu: "4"
+        memory: "8Gi"
+        cpu: "2"
       requests:
         nvidia.com/gpu: "1"
-        memory: "16Gi"
-        cpu: "2"
-
-    # Option 2: H100 MIG (1x 1g.12gb slice - smallest slice, 12GB VRAM)
-    # Uncomment and comment out Option 1 to use MIG
-    # resources:
-    #   limits:
-    #     nvidia.com/mig-2g.24gb: "1"
-    #     memory: 24Gi
-    #     cpu: "4"
-    #   requests:
-    #     nvidia.com/mig-2g.24gb: "1"
-    #     memory: 16Gi
-    #     cpu: "2"
+        memory: "4Gi"
+        cpu: "1"
 
     vllmArgs:
-      - --tensor-parallel-size=1
-      - --max-model-len=4096
-      # For MIG add: --gpu-memory-utilization=0.8
+      - --runner=pooling
+      - --max-model-len=8192
 
     nodeSelector: {}
-      # For MIG: nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
-    tolerations: []
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
 
-# Optional: GPU-constrained alternative for orchestrator
-# Enable this instead of gpt-oss-120b if you have limited GPU memory
+# Optional: larger alternative for the orchestrator role
+# Enable this instead of the nano-30b orchestrator above if you have more GPU memory
   # llama-3-3-70b-fp8:
   #   enabled: false
   #   modelUri: hf://RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic

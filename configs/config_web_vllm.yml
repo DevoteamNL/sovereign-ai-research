@@ -50,7 +50,7 @@ llms:
 
   orchestrator_llm:
     _type: openai
-    model_name: ${VLLM_ORCHESTRATOR_MODEL:-RedHatAI/gpt-oss-120b}
+    model_name: ${VLLM_ORCHESTRATOR_MODEL:-RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8}
     base_url: ${VLLM_ORCHESTRATOR_BASE_URL:-${VLLM_BASE_URL:-http://localhost:8000}}/v1
     api_key: ${VLLM_API_KEY}
     temperature: 1.0
@@ -59,7 +59,7 @@ llms:
 
   summary_llm:
     _type: openai
-    model_name: ${VLLM_SUMMARY_MODEL:-nvidia/Nemotron-Mini-4B-Instruct}
+    model_name: ${VLLM_SUMMARY_MODEL:-RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8}
     base_url: ${VLLM_SUMMARY_BASE_URL:-${VLLM_BASE_URL:-http://localhost:8000}}/v1
     api_key: ${VLLM_API_KEY}
     temperature: 0.3

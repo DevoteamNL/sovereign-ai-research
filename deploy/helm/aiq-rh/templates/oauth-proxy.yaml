@@ -1,0 +1,131 @@
+{{- /*
+OpenShift login in front of the frontend. The proxy takes over the frontend's
+Route name so the public URL stays the same; disable apps.frontend.route (and
+apps.backend.route) when enabling this, or two Routes will claim the name.
+*/}}
+{{- if .Values.oauthProxy.enabled }}
+{{- $ns := include "aiq.namespace" . }}
+{{- $name := "aiq-oauth-proxy" }}
+{{- $routeName := .Values.oauthProxy.routeName | default "aiq-frontend" }}
+{{- $secretName := printf "%s-cookie" $name }}
+{{- $existing := lookup "v1" "Secret" $ns $secretName }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+type: Opaque
+data:
+  {{- if $existing }}
+  # Reuse the existing secret so a helm upgrade doesn't log every user out.
+  cookie_secret: {{ index $existing.data "cookie_secret" }}
+  {{- else }}
+  cookie_secret: {{ randAlphaNum 32 | b64enc }}
+  {{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+  annotations:
+    serviceaccounts.openshift.io/oauth-redirectreference.primary: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"{{ $routeName }}"}}'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+    component: oauth-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $name }}
+        component: oauth-proxy
+    spec:
+      serviceAccountName: {{ $name }}
+      containers:
+        - name: oauth-proxy
+          image: {{ .Values.oauthProxy.image }}
+          args:
+            - --provider=openshift
+            - --openshift-service-account={{ $name }}
+            - --upstream={{ .Values.oauthProxy.upstream | default (printf "http://aiq-frontend.%s.svc.cluster.local:3000" $ns) }}
+            - --http-address=:8080
+            - --https-address=
+            - --cookie-secret-file=/etc/proxy/secret/cookie_secret
+            - --cookie-secure=true
+            # Only users allowed to read Services in this namespace (project members) may log in.
+            - '--openshift-sar={"namespace":"{{ $ns }}","resource":"services","verb":"get"}'
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /oauth/healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /oauth/healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.oauthProxy.resources | nindent 12 }}
+          volumeMounts:
+            - name: cookie-secret
+              mountPath: /etc/proxy/secret
+              readOnly: true
+      volumes:
+        - name: cookie-secret
+          secret:
+            secretName: {{ $secretName }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ $routeName }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+spec:
+  to:
+    kind: Service
+    name: {{ $name }}
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
+{{- end }}

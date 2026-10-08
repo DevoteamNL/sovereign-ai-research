@@ -1,0 +1,302 @@
+{{- /*
+MCP tool servers the AI-Q backend connects to (function_groups of _type mcp_client),
+plus an optional self-hosted SearXNG that the searxng MCP server queries.
+All are ClusterIP only; a NetworkPolicy limits who can call them.
+*/}}
+{{- $ns := include "aiq.namespace" . }}
+{{- $root := . }}
+{{- range $name, $srv := .Values.mcpServers }}
+{{- if $srv.enabled }}
+{{- $full := printf "aiq-mcp-%s" $name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $full }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "aiq.labels" $root | nindent 4 }}
+    component: mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $full }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $full }}
+        component: mcp-server
+    spec:
+      containers:
+        - name: mcp
+          image: {{ $srv.image }}
+          ports:
+            - name: http
+              containerPort: {{ $srv.port }}
+          env:
+            {{- range $k, $v := $srv.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ $srv.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: {{ $srv.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            {{- toYaml $srv.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $full }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "aiq.labels" $root | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $full }}
+  ports:
+    - name: http
+      port: {{ $srv.port }}
+      targetPort: {{ $srv.port }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.searxng.enabled }}
+{{- $sx := "aiq-searxng" }}
+{{- $secretName := printf "%s-secret" $sx }}
+{{- $existing := lookup "v1" "Secret" $ns $secretName }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+type: Opaque
+data:
+  {{- if $existing }}
+  secret_key: {{ index $existing.data "secret_key" }}
+  {{- else }}
+  secret_key: {{ randAlphaNum 48 | b64enc }}
+  {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $sx }}-config
+  namespace: {{ $ns }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+data:
+  settings.yml: |
+    use_default_settings:
+      engines:
+        keep_only:
+          {{- range .Values.searxng.engines }}
+          - {{ . }}
+          {{- end }}
+    # Several engines ship disabled/inactive upstream; force the chosen ones on.
+    engines:
+      {{- range .Values.searxng.engines }}
+      - name: {{ . }}
+        disabled: false
+        inactive: false
+      {{- end }}
+    general:
+      instance_name: "aiq-search"
+      enable_metrics: false
+    server:
+      # Real key comes from the SEARXNG_SECRET env var.
+      secret_key: "overridden-by-env"
+      limiter: false
+      public_instance: false
+      image_proxy: false
+    search:
+      safe_search: 0
+      # JSON output is off by default; the MCP bridge needs it.
+      formats:
+        - html
+        - json
+    outgoing:
+      request_timeout: {{ .Values.searxng.requestTimeout | default 6.0 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $sx }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+    component: searxng
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $sx }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $sx }}
+        component: searxng
+      annotations:
+        checksum/config: {{ toYaml .Values.searxng | sha256sum }}
+    spec:
+      containers:
+        - name: searxng
+          image: {{ .Values.searxng.image }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # Image default is "::"; bind IPv4 explicitly.
+            - name: GRANIAN_HOST
+              value: "0.0.0.0"
+            - name: SEARXNG_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: secret_key
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.searxng.resources | nindent 12 }}
+          volumeMounts:
+            # settings.yml present -> the entrypoint skips copying its template.
+            - name: config
+              mountPath: /etc/searxng
+              readOnly: true
+            - name: cache
+              mountPath: /var/cache/searxng
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $sx }}-config
+        - name: cache
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $sx }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $sx }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+{{- end }}
+
+{{- if .Values.mcpServers }}
+---
+# Only the backend may call MCP servers; only MCP servers may call SearXNG.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aiq-mcp-ingress
+  namespace: {{ $ns }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      component: mcp-server
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: backend
+---
+# SSRF guard: MCP servers (web_url_read fetches arbitrary URLs) may reach the
+# public internet, SearXNG and DNS only - never cluster or private addresses.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aiq-mcp-egress
+  namespace: {{ $ns }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      component: mcp-server
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+      ports:
+        - { protocol: UDP, port: 5353 }
+        - { protocol: TCP, port: 5353 }
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - to:
+        - podSelector:
+            matchLabels:
+              component: searxng
+      ports:
+        - { protocol: TCP, port: 8080 }
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+{{- if .Values.searxng.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aiq-searxng-ingress
+  namespace: {{ $ns }}
+  labels:
+    {{- include "aiq.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      component: searxng
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: mcp-server
+{{- end }}
+{{- end }}

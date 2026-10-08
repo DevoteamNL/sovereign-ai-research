@@ -13,10 +13,17 @@ metadata:
     chart: {{ $root.Chart.Name }}-{{ $root.Chart.Version }}
   annotations:
     serving.kserve.io/deploymentMode: RawDeployment
+    # KServe doesn't roll predictors when the ServingRuntime changes; this
+    # fingerprint makes a runtime change re-reconcile every InferenceService.
+    vllm-models/runtime-hash: {{ include (print $root.Template.BasePath "/servingruntime.yaml") $root | sha256sum | trunc 16 | quote }}
 spec:
   predictor:
     minReplicas: 1
     maxReplicas: 1
+    # Each pod needs a whole GPU and each GPU node has one: a rolling update would
+    # wait forever for a GPU the old pod still holds. Stop the old pod first.
+    deploymentStrategy:
+      type: Recreate
     model:
       modelFormat:
         name: vLLM
