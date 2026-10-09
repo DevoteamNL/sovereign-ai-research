@@ -28,6 +28,17 @@ This AI quickstart demonstrates how an agentic research application can support 
 
 Built as a customized version of the NVIDIA AI-Q Blueprint for Red Hat AI, this application shows how enterprise-grade research agents can run with NVIDIA models on [Red Hat AI Factory with NVIDIA](https://www.redhat.com/en/products/ai/factory-with-nvidia). The AI-Q Blueprint is built on the [NVIDIA NeMo Agent Toolkit](https://docs.nvidia.com/nemo/agent-toolkit/latest/) and [LangChain Deep Agents](https://docs.langchain.com/oss/python/deepagents/overview), providing teams with a production-ready foundation for building intelligent research workflows. The quickstart adapts this upstream pattern for Red Hat AI environments and adds enterprise platform capabilities such as scalable model serving, observability, governance, and flexible deployment options, highlighting how teams can bring agentic research workflows into hybrid cloud environments while maintaining the operational control needed for production AI applications.
 
+### Sovereign AI changes (this fork)
+
+Option A (vLLM local models) in this repository is set up so that no data leaves your cluster for NVIDIA cloud or US SaaS services:
+
+- **All models run on your GPUs** as Red Hat ModelCars (`oci://registry.redhat.io/...`), including the embedding model for uploaded documents.
+- **No API keys.** Tavily and Serper are replaced by:
+  - **Web Search**: a self-hosted [SearXNG](https://github.com/searxng/searxng) metasearch with European engines, through the [mcp-searxng](https://github.com/ihor-sokoliuk/mcp-searxng) MCP server.
+  - **EU Law**: the [EUR-Lex MCP server](https://github.com/cyanheads/eur-lex-mcp-server), which searches EU legislation in the EU Publications Office.
+- **Login required.** The UI sits behind the OpenShift OAuth proxy; only users who can access the project can open it.
+- **Network policies.** Only the backend can reach the MCP servers, and the MCP servers can reach the internet but not internal cluster addresses.
+
 ### Architecture Diagrams
 
 ![AI-Q Architecture on Red Hat AI](docs/images/rhaifn-qs-light.png)
@@ -44,34 +55,21 @@ Red Hat AI Enterprise adds the platform capabilities needed to operate the appli
 
 #### GPU Requirements (for local vLLM deployment)
 
-This deployment uses **quantized** and smaller-sized models for efficient GPU memory usage in addition to leveraging optional MIG configuration for added GPU optimization. These requirements are when models are deployed **locally on your GPUs** using vLLM (not using NGC cloud inference).
+These requirements apply when models are deployed **locally on your GPUs** using vLLM (Option A). All models are Red Hat ModelCars from `registry.redhat.io/rhai`.
 
-**Models deployed on your cluster:**
-- **RedHatAI/gpt-oss-120b (Orchestrator)**: ~80GB VRAM (quantized)
-- **RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8 (Intent & Researcher)**: ~25-30GB VRAM (quantized)
-- **nvidia/Nemotron-Mini-4B-Instruct (Summary)**: ~8-10GB VRAM
+**Tested layout: 3x NVIDIA L40S (48GB)**, one model per GPU:
 
-**Standard deployment requirements (full GPUs, not using MIG):**
-- **3x NVIDIA H100** (80GB) or **A100 80GB**
-  - GPU 0: gpt-oss-120b (orchestrator) - 1 GPU (~80GB)
-  - GPU 1: nemotron-nano-30b (intent & researcher) - 1 GPU (~30GB)
-  - GPU 2: nemotron-mini-4b (summary) - 1 GPU (~10GB)
+| GPU | Model | AI-Q roles |
+|-----|-------|------------|
+| 1 | `nemotron-nano-30b-orchestrator` (RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8) | orchestrator, planner, final report (deep research only) |
+| 2 | `nemotron-nano-30b-intent-researcher-summary` (same model) | intent, researcher, document summary |
+| 3 | `granite-embedding-english-r2-embedding` (ibm-granite/granite-embedding-english-r2) | embeddings for uploaded documents |
 
-**Optional: Multi-Instance GPU (MIG) optimization**
-
-MIG allows you to partition GPUs into smaller slices, enabling multiple models to share a single GPU efficiently and reduce overall GPU requirements.
-
-NOTE: MIG examples are based on H100 MIG profiles
-
-- **With MIG (all-balanced profile)**: 2x H100 GPUs minimum
-  - GPU 0: 2x 3g.47gb (gpt-oss-120b with tensor parallelism across 2 slices)
-  - GPU 1: 1x 3g.47gb (nemotron-nano-30b) + 1x 1g.12gb (nemotron-mini-4b)
-
-See `deploy/helm/vllm-models/values.yaml` for detailed MIG configuration examples and options.
+See [`deploy/helm/vllm-models/values.yaml`](deploy/helm/vllm-models/values.yaml) for the model settings and VRAM estimates.
 
 **Alternative: NGC API Cloud Deployment (No GPU Required)**
 
-When using NVIDIA NGC API for cloud-hosted inference, **no local GPU resources are required**. This is the quickest way to get started and test AI-Q.
+When using NVIDIA NGC API for cloud-hosted inference (Option B), **no local GPU resources are required**. Note that this sends prompts to NVIDIA's cloud.
 
 #### Storage
 
@@ -90,8 +88,8 @@ When using NVIDIA NGC API for cloud-hosted inference, **no local GPU resources a
 
 ### Minimum Software Requirements
 
-- Red Hat OpenShift Container Platform (tested with v4.20)
-- Red Hat OpenShift AI v3.3.2+ (tested with v3.3.2)
+- Red Hat OpenShift Container Platform (tested with v4.18)
+- Red Hat OpenShift AI (tested with v2.25)
 - NVIDIA GPU Operator v24.6.0+
 - Helm CLI
 - OpenShift Client CLI (oc)
@@ -115,7 +113,7 @@ Before deployment, ensure you have the following in place:
 - For vLLM deployment: GPU nodes available with NVIDIA GPU Operator installed
 - For NGC deployment: No GPU infrastructure required
 
-Obtain the following API keys:
+Option A (vLLM local models) needs **no API keys**. For Option B, obtain the following API keys:
 - **NVIDIA_API_KEY** (required for NGC model deployment)
   - Get your API key at: https://org.ngc.nvidia.com/setup/api-key
   - Sign up for NIM access at: https://build.nvidia.com/
@@ -166,7 +164,11 @@ export SERPER_API_KEY="..."
 # Create namespace
 oc create namespace ns-aiq
 
-# Create application secrets
+# Option A only needs the database credentials:
+#   oc create secret generic aiq-credentials -n ns-aiq \
+#     --from-literal=DB_USER_NAME="aiq" --from-literal=DB_USER_PASSWORD="<choose-a-password>"
+
+# Option B: create application secrets with the API keys
 oc create secret generic aiq-credentials -n ns-aiq \
   --from-literal=NVIDIA_API_KEY="$NVIDIA_API_KEY" \
   --from-literal=TAVILY_API_KEY="$TAVILY_API_KEY" \
@@ -219,8 +221,10 @@ oc get pods -n ns-aiq
 ```
 
 **What you get:**
-- LLM inference via local vLLM servers on your GPUs
+- LLM and embedding inference via local vLLM servers on your GPUs
 - Embedded LlamaIndex with ChromaDB for document storage
+- Web Search (self-hosted SearXNG) and EU Law (EUR-Lex) data sources, no API keys
+- Login with your OpenShift account
 - Full control over model selection and hosting
 - Data stays within your cluster
 - Red Hat branded UI with custom favicon
@@ -280,9 +284,13 @@ oc get pods -n ns-aiq
 - `aiq-postgres-*` - PostgreSQL database
 
 **Additional pods (vLLM deployment only):**
-- `gpt-oss-120b-predictor-*` - Orchestrator model server
-- `nemotron-nano-30b-predictor-*` - Intent & researcher model server
-- `nemotron-mini-4b-predictor-*` - Summary model server
+- `nemotron-nano-30b-orchestrator-predictor-*` - Orchestrator model server (GPU 1)
+- `nemotron-nano-30b-intent-researcher-summary-predictor-*` - Intent, researcher & summary model server (GPU 2)
+- `granite-embedding-english-r2-embedding-predictor-*` - Embedding model server (GPU 3)
+- `aiq-oauth-proxy-*` - Login (OpenShift OAuth proxy)
+- `aiq-searxng-*` - SearXNG metasearch
+- `aiq-mcp-searxng-*` - Web Search MCP server
+- `aiq-mcp-eurlex-*` - EU Law MCP server
 
 #### (Optional) Deploy Observability Stack
 
@@ -317,7 +325,7 @@ NOTE: For more detailed information on verifying the observability stack deploym
 echo "https://$(oc get route -n ns-aiq aiq-frontend -o jsonpath='{.spec.host}')"
 ```
 
-2. Navigate to the frontend UI in your browser
+2. Navigate to the frontend UI in your browser and log in with your OpenShift account
 
 3. Test the agent with different query types:
 
@@ -333,11 +341,17 @@ What is Red Hat OpenShift?
 ```
 **Expected:** Factual answer with web search citations within 10-30 seconds.
 
-**Deep research (comprehensive analysis - 2-5 minutes):**
+**EU Law (quick research - 1-2 minutes):**
 ```
-Provide a comprehensive analysis of Kubernetes security best practices
+What is the 'right to be forgotten' under the GDPR?
 ```
-**Expected:** Multi-section structured report with planning steps, research progress updates, and comprehensive citations. Overall end-to-end processing time varies.
+**Expected:** Answer explaining Article 17 of the GDPR (Regulation (EU) 2016/679), the right to erasure.
+
+**Deep research (comprehensive analysis - about 45 minutes on 3x L40S):**
+```
+Give me a comprehensive analysis comparing how the EU AI Act and DORA affect a bank's use of AI, and recommend a compliance roadmap.
+```
+**Expected:** Multi-section structured report with planning steps, research progress updates, and citations. See [Known limitations](#known-limitations).
 
 4. (Optional) Upload documents for knowledge retrieval:
 
@@ -350,6 +364,16 @@ What information is in the document I uploaded?
 **Expected:** Answer synthesized from your uploaded documents with citations to specific sections.
 
 For detailed verification steps and troubleshooting, see the [User Verification Guide](docs/user-docs/user-verification-guide.md).
+
+### Known limitations
+
+- **Deep research is slow and needs review.** On 3x L40S it takes about 45 minutes, and the sub-researchers run one at a time. The 30B orchestrator can get details wrong (for example article numbers or fine amounts in legal reports), so treat reports as drafts.
+- **Web search quality varies.** Of the configured engines (Qwant, Mojeek, Wikipedia), Qwant often returns a CAPTCHA, so most results come from Mojeek.
+- **EU Law citations show the tool name** (`eu_law_tools__eurlex_get_document`) instead of the act's name and link. The answer text names the act and article.
+- **Chat history is stored in the browser**, not on the server.
+- **Uploaded documents are lost when the backend restarts** (ChromaDB uses `emptyDir`), and the document collection is shared by all users.
+- **MCP server images are community builds** (`docker.io/isokoliuk/mcp-searxng`, `ghcr.io/cyanheads/eur-lex-mcp-server`).
+- **Tracing errors in the backend log** when the observability stack is not installed. They are harmless.
 
 ## Delete
 

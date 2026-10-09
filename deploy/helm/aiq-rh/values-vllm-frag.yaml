@@ -8,8 +8,8 @@
 # - vLLM server(s) running and accessible from the cluster
 # - Models loaded:
 #   - RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8 (intent & researcher)
-#   - RedHatAI/gpt-oss-120b (orchestrator)
-#   - nvidia/Nemotron-Mini-4B-Instruct (summary)
+#   - RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8 (orchestrator, separate InferenceService)
+#   - RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8 (summary, shares the intent/researcher InferenceService)
 # - NVIDIA RAG Blueprint deployed and accessible
 # - Know your RAG server URLs (query and ingestion endpoints)
 #
@@ -27,18 +27,21 @@ apps:
 
       # vLLM endpoints - when using vllm-models chart, these point to separate InferenceServices
       # Intent & Researcher use the same model, so share the same endpoint
-      VLLM_BASE_URL: http://nemotron-nano-30b-predictor.ns-aiq.svc.cluster.local:8080
-      VLLM_ORCHESTRATOR_BASE_URL: http://gpt-oss-120b-predictor.ns-aiq.svc.cluster.local:8080
-      VLLM_SUMMARY_BASE_URL: http://nemotron-mini-4b-predictor.ns-aiq.svc.cluster.local:8080
+      # No port: KServe predictor Services listen on 80 (targetPort 8080), which
+      # is what the InferenceService URL reports. Using :8080 here blackholes
+      # every LLM call while the pods still look healthy.
+      VLLM_BASE_URL: http://nemotron-nano-30b-intent-researcher-summary-predictor.ns-aiq.svc.cluster.local
+      VLLM_ORCHESTRATOR_BASE_URL: http://nemotron-nano-30b-orchestrator-predictor.ns-aiq.svc.cluster.local
+      VLLM_SUMMARY_BASE_URL: http://nemotron-nano-30b-intent-researcher-summary-predictor.ns-aiq.svc.cluster.local
       VLLM_API_KEY: no-key  # vLLM servers don't require auth by default
 
       # Model names (should match servedModelName in vllm-models chart)
       # VLLM_INTENT_MODEL: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
       # VLLM_RESEARCHER_MODEL: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
-      # VLLM_ORCHESTRATOR_MODEL: RedHatAI/gpt-oss-120b
-      # VLLM_SUMMARY_MODEL: nvidia/Nemotron-Mini-4B-Instruct
+      # VLLM_ORCHESTRATOR_MODEL: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+      # VLLM_SUMMARY_MODEL: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
 
-      # GPU-constrained alternative: swap gpt-oss-120b for llama-3-3-70b-fp8 in vllm-models chart
+      # Alternative orchestrator: swap in llama-3-3-70b-fp8 via the vllm-models chart
       # VLLM_ORCHESTRATOR_MODEL: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
       # VLLM_ORCHESTRATOR_BASE_URL: http://llama-3-3-70b-fp8-predictor.ns-aiq.svc.cluster.local:8080
 
@@ -143,7 +146,7 @@ apps:
               max_tokens: 16384
             orchestrator_llm:
               _type: openai
-              model_name: ${VLLM_ORCHESTRATOR_MODEL:-RedHatAI/gpt-oss-120b}
+              model_name: ${VLLM_ORCHESTRATOR_MODEL:-RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8}
               base_url: ${VLLM_ORCHESTRATOR_BASE_URL:-${VLLM_BASE_URL:-http://localhost:8000}}/v1
               api_key: ${VLLM_API_KEY}
               temperature: 1.0
@@ -151,11 +154,11 @@ apps:
               max_tokens: 65536
             summary_llm:
               _type: openai
-              model_name: ${VLLM_SUMMARY_MODEL:-nvidia/Nemotron-Mini-4B-Instruct}
+              model_name: ${VLLM_SUMMARY_MODEL:-RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8}
               base_url: ${VLLM_SUMMARY_BASE_URL:-${VLLM_BASE_URL:-http://localhost:8000}}/v1
               api_key: ${VLLM_API_KEY}
               temperature: 0.3
-              max_tokens: 100
+              max_tokens: 256
           functions:
             # =========================================================================
             # Data Source Registry

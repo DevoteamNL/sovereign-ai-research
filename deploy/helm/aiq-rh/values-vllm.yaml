@@ -5,9 +5,9 @@
 # Prerequisites:
 # - vLLM server(s) running and accessible from the cluster
 # - Models loaded:
-#   - RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8 (intent & researcher)
-#   - RedHatAI/gpt-oss-120b (orchestrator)
-#   - nvidia/Nemotron-Mini-4B-Instruct (summary)
+#   - RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8 (orchestrator)
+#   - RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8 (intent, researcher & summary, separate InferenceService)
+#   - ibm-granite/granite-embedding-english-r2 (embedding, used by the knowledge layer)
 #
 # Usage:
 #   helm upgrade --install aiq aiq-rh/ -n ns-aiq \
@@ -16,15 +16,29 @@
 
 apps:
   backend:
+    # No public Route: the UI server reaches the backend in-cluster via BACKEND_URL.
+    route:
+      enabled: false
     env:
       CONFIG_FILE: /app/configs-custom/config_web_vllm.yml
 
       # vLLM endpoints - when using vllm-models chart, these point to separate InferenceServices
-      # Intent & Researcher use the same model, so share the same endpoint
-      VLLM_BASE_URL: http://nemotron-nano-30b-predictor.ns-aiq.svc.cluster.local:8080
-      VLLM_ORCHESTRATOR_BASE_URL: http://gpt-oss-120b-predictor.ns-aiq.svc.cluster.local:8080
-      VLLM_SUMMARY_BASE_URL: http://nemotron-mini-4b-predictor.ns-aiq.svc.cluster.local:8080
+      # Intent, Researcher & Summary use the same model, so share the same endpoint
+      # No port: KServe predictor Services listen on 80 (targetPort 8080), which
+      # is what the InferenceService URL reports. Using :8080 here blackholes
+      # every LLM call while the pods still look healthy.
+      VLLM_BASE_URL: http://nemotron-nano-30b-intent-researcher-summary-predictor.ns-aiq.svc.cluster.local
+      VLLM_ORCHESTRATOR_BASE_URL: http://nemotron-nano-30b-orchestrator-predictor.ns-aiq.svc.cluster.local
+      VLLM_SUMMARY_BASE_URL: http://nemotron-nano-30b-intent-researcher-summary-predictor.ns-aiq.svc.cluster.local
       VLLM_API_KEY: no-key  # vLLM servers don't require auth by default
+
+      # Knowledge-layer embedding model. Defaults to NVIDIA's hosted API
+      # (integrate.api.nvidia.com) unless overridden, which would send every
+      # uploaded document off-cluster.
+      AIQ_EMBED_BASE_URL: http://granite-embedding-english-r2-embedding-predictor.ns-aiq.svc.cluster.local/v1
+      AIQ_EMBED_MODEL: ibm-granite/granite-embedding-english-r2
+      # Uploaded collections are auto-deleted after 24h by default.
+      AIQ_COLLECTION_TTL_HOURS: "720"
 
       # OpenTelemetry certificate for HTTPS MLflow connection
       OTEL_EXPORTER_OTLP_CERTIFICATE: /etc/ssl/certs/openshift-service-ca.crt
@@ -32,10 +46,10 @@ apps:
       # Model names (should match servedModelName in vllm-models chart)
       # VLLM_INTENT_MODEL: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
       # VLLM_RESEARCHER_MODEL: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
-      # VLLM_ORCHESTRATOR_MODEL: RedHatAI/gpt-oss-120b
-      # VLLM_SUMMARY_MODEL: nvidia/Nemotron-Mini-4B-Instruct
+      # VLLM_ORCHESTRATOR_MODEL: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
+      # VLLM_SUMMARY_MODEL: RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8
 
-      # GPU-constrained alternative: swap gpt-oss-120b for llama-3-3-70b-fp8 in vllm-models chart
+      # Alternative orchestrator: swap in llama-3-3-70b-fp8 via the vllm-models chart
       # VLLM_ORCHESTRATOR_MODEL: RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic
       # VLLM_ORCHESTRATOR_BASE_URL: http://llama-3-3-70b-fp8-predictor.ns-aiq.svc.cluster.local:8080
 
@@ -128,7 +142,7 @@ apps:
               max_tokens: 16384
             orchestrator_llm:
               _type: openai
-              model_name: ${VLLM_ORCHESTRATOR_MODEL:-RedHatAI/gpt-oss-120b}
+              model_name: ${VLLM_ORCHESTRATOR_MODEL:-RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8}
               base_url: ${VLLM_ORCHESTRATOR_BASE_URL:-${VLLM_BASE_URL:-http://localhost:8000}}/v1
               api_key: ${VLLM_API_KEY}
               temperature: 1.0
@@ -136,11 +150,73 @@ apps:
               max_tokens: 65536
             summary_llm:
               _type: openai
-              model_name: ${VLLM_SUMMARY_MODEL:-nvidia/Nemotron-Mini-4B-Instruct}
+              model_name: ${VLLM_SUMMARY_MODEL:-RedHatAI/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8}
               base_url: ${VLLM_SUMMARY_BASE_URL:-${VLLM_BASE_URL:-http://localhost:8000}}/v1
               api_key: ${VLLM_API_KEY}
               temperature: 0.3
-              max_tokens: 100
+              # Nemotron reasons before answering; 100 tokens cut summaries mid-sentence.
+              max_tokens: 256
+          # MCP tool servers (see mcpServers / searxng in this values file)
+          function_groups:
+            eu_law_tools:
+              _type: mcp_client
+              server:
+                transport: streamable-http
+                url: http://aiq-mcp-eurlex.ns-aiq.svc.cluster.local:3010/mcp
+              exclude:
+                - eurlex_query_sparql   # raw SPARQL escape hatch; too error-prone for the agent
+              # EUR-Lex search matches formal titles only (nicknames like "DORA" rank
+              # poorly), so steer the agent to exact CELEX lookups for the key acts.
+              # Avoid the words "unavailable"/"missing" here (see web_url_read note).
+              tool_overrides:
+                eurlex_lookup_celex:
+                  description: >-
+                    Resolve an EU act by CELEX number, ELI URI, ECLI or OJ citation and return
+                    its official metadata. Prefer this over searching for these well-known
+                    financial-sector acts - use the exact CELEX number:
+                    DORA (digital operational resilience) = 32022R2554;
+                    GDPR = 32016R0679;
+                    AI Act = 32024R1689;
+                    MiFID II = 32014L0065;
+                    CRR (capital requirements regulation) = 32013R0575;
+                    CRD (capital requirements directive) = 32013L0036;
+                    NIS2 = 32022L2555.
+                    Do not guess CELEX numbers for other acts; use eurlex_search_documents.
+                eurlex_search_documents:
+                  description: >-
+                    Search EU legislation, treaties and preparatory acts in EUR-Lex. The keyword
+                    matches formal official titles, which rarely contain nicknames or
+                    abbreviations: search with descriptive title words (e.g. "digital operational
+                    resilience for the financial sector", not "DORA"). Narrow results with
+                    document_type (REG = regulations, DIR = directives) and in_force = true.
+                    Returns CELEX numbers to pass to eurlex_get_document.
+                eurlex_get_document:
+                  description: >-
+                    Fetch the official metadata and text of an EU act or judgment by
+                    celex_number, including whether it is in force and its current consolidated
+                    version. To read specific provisions, set format to "markdown" and pass
+                    select as an object with a string value, e.g. {"articles": "28"} or
+                    {"articles": "28-30"}; this returns only those articles. Cite the act by its
+                    title and CELEX number.
+            web_search_tools:
+              _type: mcp_client
+              server:
+                transport: streamable-http
+                url: http://aiq-mcp-searxng.ns-aiq.svc.cluster.local:3000/mcp
+              include:
+                - searxng_web_search
+                - web_url_read          # full page content; egress NetworkPolicy blocks internal addresses
+              tool_overrides:
+                # AI-Q treats any tool whose description contains "unavailable" or
+                # "missing" as a disabled stub (tool_validation.py); upstream's
+                # description says "transient-unavailable", so replace it.
+                web_url_read:
+                  description: >-
+                    Fetches a web page by URL and returns its readable content as markdown
+                    (HTML converted, PDF text extracted). Use after searxng_web_search to read
+                    the full text of a promising result. Paginate long pages with startChar and
+                    maxLength, return one section with `section`, or list headings with
+                    readHeadings.
           functions:
             # =========================================================================
             # Data Source Registry
@@ -152,35 +228,19 @@ apps:
               sources:
                 - id: web_search
                   name: "Web Search"
-                  description: "Search the web for real-time information."
+                  description: "Search the web via our own SearXNG gateway (European engines) and read pages."
                   tools:
-                    - web_search_tool
-                    - advanced_web_search_tool
+                    - web_search_tools
                 - id: knowledge_layer
                   name: "Knowledge Base"
                   description: "Search uploaded documents and files."
                   tools:
                     - knowledge_search
-                - id: paper_search
-                  name: "Academic Papers"
-                  description: "Search academic papers and scientific publications."
+                - id: eu_law
+                  name: "EU Law"
+                  description: "Search EU legislation (e.g. CRR/CRD, MiFID II, DORA, AI Act, GDPR) and CJEU case law in EUR-Lex."
                   tools:
-                    - paper_search_tool
-
-            web_search_tool:
-              _type: tavily_web_search
-              max_results: 5
-              max_content_length: 1000
-
-            advanced_web_search_tool:
-              _type: tavily_web_search
-              max_results: 2
-              advanced_search: true
-
-            paper_search_tool:
-              _type: paper_search
-              max_results: 5
-              serper_api_key: ${SERPER_API_KEY}
+                    - eu_law_tools
 
             knowledge_search:
               _type: knowledge_retrieval
@@ -218,8 +278,6 @@ apps:
               _type: shallow_research_agent
               llm: researcher_llm
               # tools: omitted -> inherits all from data_source_registry
-              exclude_tools:
-                - advanced_web_search_tool  # Remove advanced variant; shallow uses web_search_tool
               verbose: true
               max_llm_turns: 10
               max_tool_iterations: 5
@@ -230,8 +288,6 @@ apps:
               researcher_llm: researcher_llm
               planner_llm: orchestrator_llm
               # tools: omitted -> inherits all from data_source_registry
-              exclude_tools:
-                - web_search_tool  # Remove basic variant; deep uses advanced_web_search_tool
               max_loops: 2
               verbose: true
           workflow:
@@ -246,7 +302,63 @@ apps:
       - name: ngc-api
 
   frontend:
+    # Public access goes through the oauth-proxy Route (same name, same URL).
+    route:
+      enabled: false
     env:
       VLLM_API_KEY: no-key
     imagePullSecrets:
       - name: ngc-api
+
+# Require an OpenShift login; only members of this project can open the app.
+oauthProxy:
+  enabled: true
+
+# MCP tool servers. Images are the authors' builds pinned to exact versions;
+# rebuild on Red Hat UBI before production use.
+mcpServers:
+  # EU legislation + CJEU case law from the EU Publications Office (CELLAR). No API key.
+  eurlex:
+    enabled: true
+    image: ghcr.io/cyanheads/eur-lex-mcp-server:0.18.2
+    port: 3010
+    env:
+      MCP_TRANSPORT_TYPE: http
+      MCP_HTTP_HOST: 0.0.0.0        # default 127.0.0.1 is unreachable from other pods
+      MCP_HTTP_PORT: "3010"
+      MCP_SESSION_MODE: stateless
+      MCP_AUTH_MODE: none           # protected by NetworkPolicy: only the backend can call it
+      MCP_LOG_LEVEL: info
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi                 # large acts converted to Markdown can spike memory
+  # Web search via our own SearXNG instance. No API key.
+  searxng:
+    enabled: true
+    image: docker.io/isokoliuk/mcp-searxng:2.5.1
+    port: 3000
+    env:
+      SEARXNG_URL: http://aiq-searxng:8080
+      MCP_HTTP_HOST: 0.0.0.0
+      MCP_HTTP_PORT: "3000"
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# Self-hosted search gateway, restricted to European engines + Wikipedia.
+searxng:
+  enabled: true
+  # Startpage (NL) is excluded: SearXNG marks it inactive because it serves a
+  # proof-of-work captcha to automated clients.
+  engines:
+    - qwant        # France
+    - mojeek       # UK, independent index
+    - wikipedia
