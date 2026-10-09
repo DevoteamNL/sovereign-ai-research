@@ -54,7 +54,10 @@ models:
 
     vllmArgs:
       - --enable-force-include-usage
-      - --max-model-len=131072
+      # Native context. Input room = this minus the role's max_tokens (65536 for
+      # the orchestrator); it must stay above deepagents' context-summarization
+      # trigger (~170k tokens), or long deep-research runs fail with HTTP 400.
+      - --max-model-len=262144
       - --enable-auto-tool-choice
       - --tool-call-parser=qwen3_coder
       - --trust-remote-code
@@ -103,7 +106,8 @@ models:
 
     vllmArgs:
       - --enable-force-include-usage
-      - --max-model-len=131072
+      # Native context; see the orchestrator above.
+      - --max-model-len=262144
       - --enable-auto-tool-choice
       - --tool-call-parser=qwen3_coder
       - --trust-remote-code
